@@ -118,7 +118,8 @@ function blockRuntimeIdByName (botState, name) {
 
 function getBlockRuntimeId (botState, pos, fallback = {}) {
   try {
-    const block = botState.world.getBlock(pos)
+    const world = botState.world?.sync || botState.world
+    const block = world?.getBlock?.(pos)
     if (block?.stateId != null) {
       return botState.registry.blockNetworkRuntimeIdsByStateId?.[block.stateId] ?? block.stateId
     }

@@ -12,24 +12,14 @@ const {
 const {
   assertSlot
 } = require('../helpers/shared')
+const {
+  findSlotByName,
+  sleep,
+  waitForSpawn
+} = require("../helpers/live");
 
 
 const AFTER_ACTION_DELAY_MS = Number(process.env.AFTER_ACTION_DELAY_MS || 1000);
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function waitForSpawn(botState, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timeout waiting for spawn")), timeoutMs);
-
-    botState.client.once("spawn", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
-}
 
 async function setupInventory(botState) {
 //   const listener = (packet) => {
@@ -51,12 +41,6 @@ async function setupInventory(botState) {
 
 function itemAt(botState, slot) {
   return botState.inventory.slots[slot];
-}
-
-function findSlotByName(botState, name) {
-  const slot = botState.inventory.slots.findIndex((item) => item?.name === name);
-  assert.notStrictEqual(slot, -1, `Could not find ${name} in inventory`);
-  return slot;
 }
 
 function emptySlots(botState) {

@@ -116,7 +116,9 @@ module.exports = (botState, options) => {
 
   function loadBlockNetworkRuntimeIds(packet) {
     const useHashes = !!packet.block_network_ids_are_hashes;
+    const hasLiveRuntimePalette = Array.isArray(packet.block_properties) && packet.block_properties.length > 0;
 
+    botState.protocolState.hasLiveBlockRuntimePalette = hasLiveRuntimePalette;
     registry.blocksByRuntimeId = {};
     registry.blockNetworkRuntimeIdsByStateId = {};
     loadVersionedBlockRuntimeIds(useHashes);

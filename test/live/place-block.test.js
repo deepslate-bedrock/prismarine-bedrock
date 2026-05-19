@@ -12,6 +12,15 @@ const {
   setPlayerGamemode,
   teleportPlayer
 } = require('../helpers/commands')
+const {
+  assertHasApi,
+  captureQueuedPackets,
+  findQueuedPacket,
+  findSlotByName,
+  sleep,
+  waitForBlockName,
+  waitForSpawn
+} = require('../helpers/live')
 
 const HOST = process.env.HOST || 'localhost'
 const PORT = parseInt(process.env.PORT, 10) || 19132
@@ -21,45 +30,6 @@ const { VERSION } = require('../helpers/test-env')
 
 const SETUP_DELAY_MS = Number(process.env.SETUP_DELAY_MS || 700)
 const PLACE_DELAY_MS = Number(process.env.PLACE_DELAY_MS || 900)
-
-function sleep (ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-function waitForSpawn (botState, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('Timeout waiting for spawn'))
-    }, timeoutMs)
-
-    botState.client.once('spawn', () => {
-      clearTimeout(timeout)
-      resolve()
-    })
-  })
-}
-
-function waitForPacket (client, name, predicate = () => true, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup()
-      reject(new Error(`Timed out waiting for ${name}`))
-    }, timeoutMs)
-
-    function onPacket (packet) {
-      if (!predicate(packet)) return
-      cleanup()
-      resolve(packet)
-    }
-
-    function cleanup () {
-      clearTimeout(timeout)
-      client.off(name, onPacket)
-    }
-
-    client.on(name, onPacket)
-  })
-}
 
 async function setupFlatPlacementArea (botState) {
   // Keep this small and deterministic.
@@ -90,54 +60,6 @@ async function giveItem (botState, itemName, count = 1) {
 async function setPlayerItemSlot (botState, slot, itemName, count = 1) {
   sendCommand(botState, `item replace entity .${USERNAME} ${slot} with minecraft:${itemName} ${count}`)
   await sleep(SETUP_DELAY_MS)
-}
-
-function findSlotByName (botState, name) {
-  const slot = botState.inventory.slots.findIndex(item => item?.name === name)
-  assert.notStrictEqual(slot, -1, `Could not find ${name} in inventory`)
-  return slot
-}
-
-function assertHasApi (botState, name) {
-  assert.strictEqual(typeof botState[name], 'function', `Expected botState.${name} to exist`)
-}
-
-function captureQueuedPackets (botState, options = {}) {
-  const suppress = new Set(options.suppress || [])
-  const packets = []
-  const originalQueue = botState.client.queue.bind(botState.client)
-
-  botState.client.queue = function queueWithCapture (name, packet) {
-    packets.push({ name, packet })
-    if (suppress.has(name)) return
-    return originalQueue(name, packet)
-  }
-
-  return {
-    packets,
-    restore () {
-      botState.client.queue = originalQueue
-    }
-  }
-}
-
-function findQueuedPacket (packets, name, predicate = () => true) {
-  return packets.find(entry => entry.name === name && predicate(entry.packet))
-}
-
-async function waitForBlockName (botState, pos, expectedName, timeoutMs = 8000) {
-  const start = Date.now()
-
-  while (Date.now() - start < timeoutMs) {
-    const block = await botState.getBlock(pos)
-    if (block?.name === expectedName) return block
-    await sleep(150)
-  }
-
-  const finalBlock = await botState.getBlock(pos)
-  throw new Error(
-    `Timed out waiting for block ${expectedName} at ${pos}; got ${finalBlock?.name ?? 'unknown'}`
-  )
 }
 
 describe('block placing integration', function () {

@@ -409,6 +409,71 @@ describe('world readiness helpers', function () {
     assert.strictEqual(updates[0].stateId, 123)
   })
 
+  it('keeps non-hash update_block IDs as local state IDs when no live server palette exists', async function () {
+    const updates = []
+    const botState = createBotState()
+
+    botState.protocolState.blockNetworkIdsAreHashes = false
+    botState.protocolState.hasLiveBlockRuntimePalette = false
+    botState.registry = {
+      blocksByStateId: {
+        2533: { name: 'stone' }
+      },
+      blocksByRuntimeId: {
+        2533: { stateId: 2534, name: 'smooth_sandstone_slab' }
+      }
+    }
+    botState.world.getColumnAt = async () => ({})
+    botState.world.setBlockStateId = async (pos, stateId) => {
+      updates.push({ pos, stateId })
+    }
+
+    injectWorld(botState)
+
+    botState.client.emit('update_block', {
+      position: { x: 2, y: 65, z: 3 },
+      block_runtime_id: 2533,
+      layer: 0
+    })
+
+    await waitImmediate()
+
+    assert.strictEqual(updates.length, 1)
+    assert.strictEqual(updates[0].stateId, 2533)
+  })
+
+  it('uses mapped runtime IDs for hash update_block packets', async function () {
+    const updates = []
+    const botState = createBotState()
+
+    botState.protocolState.blockNetworkIdsAreHashes = true
+    botState.registry = {
+      blocksByRuntimeId: {
+        '-1132117234': { stateId: 13313, name: 'chest' }
+      },
+      blocksByStateId: {
+        13313: { name: 'chest' }
+      }
+    }
+    botState.world.getColumnAt = async () => ({})
+    botState.world.setBlockStateId = async (pos, stateId) => {
+      updates.push({ pos, stateId })
+    }
+
+    injectWorld(botState)
+
+    botState.client.emit('update_block', {
+      position: { x: 2, y: 65, z: 0 },
+      block_runtime_id: -1132117234,
+      layer: 0
+    })
+
+    await waitImmediate()
+
+    assert.strictEqual(updates.length, 1)
+    assert.strictEqual(updates[0].stateId, 13313)
+  })
+
   it('drops active world decode state on dimension change', function () {
     const botState = createBotState()
     injectWorld(botState)

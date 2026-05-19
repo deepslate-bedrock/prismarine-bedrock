@@ -3,10 +3,22 @@
 const assert = require("assert");
 const { Vec3 } = require("vec3");
 const BotState = require("../../src/state");
-const { clearPlayer, givePlayer, sendCommand, setBlockIfNeeded, setPlayerGamemode, teleportPlayer } = require("../helpers/commands");
+const { clearPlayer, givePlayer, setBlockIfNeeded, setPlayerGamemode, teleportPlayer } = require("../helpers/commands");
 const { HOST, PORT, USERNAME, OFFLINE, VERSION, SETUP_DELAY_MS } = require("../helpers/test-env");
-
 const { assertSlot } = require("../helpers/shared");
+const {
+  assertBotConnected,
+  findSlotByName,
+  isBotConnected,
+  itemSignature,
+  itemSummary,
+  markLocalBlock,
+  safeJsonReplacer,
+  sleep,
+  waitForBlockName,
+  waitForSpawn,
+  waitUntil,
+} = require("../helpers/live");
 
 const CHEST_POS = new Vec3(2, 65, 0);
 const DOUBLE_CHEST_POS = new Vec3(4, 65, 0);
@@ -14,22 +26,8 @@ const FURNACE_POS = new Vec3(6, 65, 0);
 const BREWING_POS = new Vec3(8, 65, 0);
 const AFTER_ACTION_DELAY_MS = Number(process.env.AFTER_ACTION_DELAY_MS || 700);
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function waitForSpawn(botState, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timeout waiting for spawn")), timeoutMs);
-
-    botState.client.once("spawn", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
-}
-
 function giveSetupItem(botState, item) {
+  assertBotConnected(botState, "give setup item");
   const count = item.count ?? 1;
   const target = item.item || item.commandItem || item.name;
   assert(target, `setupContainerArea item is missing name/item: ${JSON.stringify(item)}`);
@@ -37,11 +35,14 @@ function giveSetupItem(botState, item) {
 }
 
 async function setupContainerArea(botState, blocks, items = []) {
+  assertBotConnected(botState, "setupContainerArea");
   setPlayerGamemode(botState, USERNAME, "creative");
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupContainerArea after creative gamemode");
 
   clearPlayer(botState, USERNAME);
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupContainerArea after clear");
 
   for (const { pos } of blocks) {
     await setBlockIfNeeded(botState, pos.offset(0, -1, 0), "minecraft:stone");
@@ -58,6 +59,7 @@ async function setupContainerArea(botState, blocks, items = []) {
 
   teleportPlayer(botState, USERNAME, first.x + 0.5, first.y + 1, first.z + 3.5);
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupContainerArea after teleport");
 
   for (const { pos, block } of blocks) {
     await setBlockIfNeeded(botState, pos, block);
@@ -73,24 +75,22 @@ async function setupContainerArea(botState, blocks, items = []) {
   }
 
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupContainerArea after item setup");
 
   setPlayerGamemode(botState, USERNAME, "survival");
   await sleep(SETUP_DELAY_MS);
-}
-
-async function markLocalBlock(botState, pos, block) {
-  const name = block.replace(/^minecraft:/, "").split("[")[0];
-  const stateId = botState.registry.blocksByName[name]?.defaultState;
-  if (stateId == null || typeof botState.setBlockStateIdAt !== "function") return;
-  await botState.setBlockStateIdAt(pos, stateId);
+  assertBotConnected(botState, "setupContainerArea after survival gamemode");
 }
 
 async function setupDoubleChestArea(botState) {
+  assertBotConnected(botState, "setupDoubleChestArea");
   setPlayerGamemode(botState, USERNAME, "creative");
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupDoubleChestArea after creative gamemode");
 
   clearPlayer(botState, USERNAME);
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupDoubleChestArea after clear");
 
   const rightChestPos = DOUBLE_CHEST_POS.offset(1, 0, 0);
   for (const pos of [DOUBLE_CHEST_POS, rightChestPos]) {
@@ -107,13 +107,16 @@ async function setupDoubleChestArea(botState) {
 
   teleportPlayer(botState, USERNAME, DOUBLE_CHEST_POS.x + 0.5, DOUBLE_CHEST_POS.y + 1, DOUBLE_CHEST_POS.z + 3.5);
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupDoubleChestArea after teleport");
 
   givePlayer(botState, USERNAME, "chest", 2);
   givePlayer(botState, USERNAME, "diamond", 4);
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupDoubleChestArea after item setup");
 
   setPlayerGamemode(botState, USERNAME, "survival");
   await sleep(SETUP_DELAY_MS);
+  assertBotConnected(botState, "setupDoubleChestArea after survival gamemode");
 
   const chestSlot = findSlotByName(botState, "chest");
   await botState.equipItem(chestSlot);
@@ -139,26 +142,8 @@ function brewingBlock(pos) {
   return { pos, block: "minecraft:brewing_stand", expectedName: "brewing_stand" };
 }
 
-async function waitForBlockName(botState, pos, expectedName, timeoutMs = 8000) {
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    const block = await botState.getBlock(pos);
-    if (block?.name === expectedName) return block;
-    await sleep(150);
-  }
-
-  const finalBlock = await botState.getBlock(pos);
-  throw new Error(`Timed out waiting for block ${expectedName} at ${pos}; got ${finalBlock?.name ?? "unknown"}`);
-}
-
-function findSlotByName(botState, name) {
-  const slot = botState.inventory.slots.findIndex((item) => item?.name === name);
-  assert.notStrictEqual(slot, -1, `Could not find ${name} in inventory`);
-  return slot;
-}
-
 async function assertContainerActionProducesPackets(botState, actionName, fn) {
+  assertBotConnected(botState, actionName);
   const seen = {
     request: false,
     response: false,
@@ -182,7 +167,9 @@ async function assertContainerActionProducesPackets(botState, actionName, fn) {
 
   try {
     const result = await fn();
+    assertBotConnected(botState, `${actionName} after action`);
     await sleep(AFTER_ACTION_DELAY_MS);
+    assertBotConnected(botState, `${actionName} after packet wait`);
 
     assert.strictEqual(seen.request, true, `${actionName} did not send item_stack_request`);
     assert.strictEqual(seen.response, true, `${actionName} did not receive item_stack_response`);
@@ -193,74 +180,6 @@ async function assertContainerActionProducesPackets(botState, actionName, fn) {
   }
 }
 
-function safeJsonReplacer(_, value) {
-  if (typeof value === "bigint") return value.toString();
-  if (Buffer.isBuffer(value)) {
-    return {
-      type: "Buffer",
-      length: value.length,
-      hex: value.toString("hex"),
-    };
-  }
-  return value;
-}
-
-function itemSignature(item) {
-  if (!item) return null;
-
-  return JSON.stringify(
-    {
-      type: item.type,
-      name: item.name,
-      count: item.count,
-      metadata: item.metadata,
-      nbt: item.nbt,
-      raw: item.raw
-        ? {
-            network_id: item.raw.network_id,
-            metadata: item.raw.metadata,
-            block_runtime_id: item.raw.block_runtime_id,
-            extra: item.raw.extra,
-          }
-        : null,
-    },
-    safeJsonReplacer,
-  );
-}
-
-function itemSummary(item) {
-  if (!item) return null;
-
-  return {
-    type: item.type,
-    name: item.name,
-    count: item.count,
-    metadata: item.metadata,
-    nbt: item.nbt,
-    raw: item.raw
-      ? {
-          network_id: item.raw.network_id,
-          metadata: item.raw.metadata,
-          block_runtime_id: item.raw.block_runtime_id,
-          extra: item.raw.extra,
-        }
-      : null,
-  };
-}
-
-async function waitUntil(label, predicate, timeoutMs = 30000, intervalMs = 250) {
-  const start = Date.now();
-  let lastValue;
-
-  while (Date.now() - start < timeoutMs) {
-    lastValue = await predicate();
-    if (lastValue) return lastValue;
-    await sleep(intervalMs);
-  }
-
-  throw new Error(`Timed out waiting for ${label}; last=${JSON.stringify(lastValue, safeJsonReplacer)}`);
-}
-
 async function waitForContainerSlotName(container, slot, expectedName, timeoutMs = 30000) {
   return waitUntil(
     `${container.type} slot ${slot} to become ${expectedName}`,
@@ -269,6 +188,8 @@ async function waitForContainerSlotName(container, slot, expectedName, timeoutMs
       return item?.name === expectedName ? item : false;
     },
     timeoutMs,
+    250,
+    container.botState,
   );
 }
 
@@ -288,6 +209,7 @@ describe("real chest containers", function () {
   this.timeout(180000);
 
   let botState;
+  let disconnectedAt = null;
 
   before(async function () {
     botState = new BotState({
@@ -299,9 +221,21 @@ describe("real chest containers", function () {
     });
 
     botState.start();
+    botState.client.once("close", () => {
+      disconnectedAt = new Date();
+    });
     await waitForSpawn(botState);
 
     botState.setInventoryActionResponseTimeout?.(10000);
+  });
+
+  beforeEach(function () {
+    assert(
+      isBotConnected(botState),
+      disconnectedAt
+        ? `Bot disconnected at ${disconnectedAt.toISOString()}; failing this test immediately instead of cascading setup errors`
+        : "Bot is not connected; failing this test immediately instead of cascading setup errors",
+    );
   });
 
   after(async function () {
@@ -447,6 +381,8 @@ describe("real chest containers", function () {
         return progress.isBurning || progress.isCooking || progress.litTime > 0 || progress.tickCount > 0 ? progress : false;
       },
       15000,
+      250,
+      botState,
     );
 
     const startedProgress = furnace.getFurnaceProgress();
@@ -520,6 +456,8 @@ describe("real chest containers", function () {
         return progress.hasFuel || progress.fuelAmount > 0 ? progress : false;
       },
       15000,
+      250,
+      botState,
     );
 
     assertSlot(brewing.window, 4, null, 0);
@@ -557,6 +495,8 @@ describe("real chest containers", function () {
         return progress.isBrewing || progress.brewTime > 0 ? progress : false;
       },
       15000,
+      250,
+      botState,
     );
 
     const startedProgress = brewing.getBrewingProgress();
@@ -581,6 +521,8 @@ describe("real chest containers", function () {
           : false;
       },
       60000,
+      250,
+      botState,
     );
 
     for (let i = 0; i < 3; i++) {

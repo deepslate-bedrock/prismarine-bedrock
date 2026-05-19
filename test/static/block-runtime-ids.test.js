@@ -42,6 +42,26 @@ describe('block runtime id mapping', function () {
     assert.strictEqual(getBlockRuntimeId(botState, new Vec3(1, 2, 3)), 1921718966)
   })
 
+  it('reads outbound block runtime IDs from the synchronous world mirror', function () {
+    const botState = {
+      registry: {
+        blockNetworkRuntimeIdsByStateId: {
+          13313: -1132117234
+        }
+      },
+      world: {
+        getBlock: async () => {
+          throw new Error('async world getter should not be used for packet construction')
+        },
+        sync: {
+          getBlock: () => ({ stateId: 13313, name: 'chest' })
+        }
+      }
+    }
+
+    assert.strictEqual(getBlockRuntimeId(botState, new Vec3(2, 65, 0)), -1132117234)
+  })
+
   it('keeps outbound palette state IDs when no hash map exists', function () {
     const botState = {
       registry: {},

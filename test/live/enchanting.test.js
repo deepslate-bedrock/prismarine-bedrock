@@ -6,6 +6,18 @@ const BotState = require("../../src/state");
 const { bedrockPlayerName, clearPlayer, givePlayer, sendCommand, setPlayerGamemode, teleportPlayer } = require("../helpers/commands");
 const { HOST, PORT, USERNAME, OFFLINE, VERSION, SETUP_DELAY_MS } = require("../helpers/test-env");
 const { assertSlot } = require("../helpers/shared");
+const {
+  findSlotByName,
+  itemSignature,
+  itemSummary,
+  markLocalBlock,
+  safeJsonReplacer,
+  sleep,
+  waitForBlockName,
+  waitForInventoryCount,
+  waitForSpawn,
+  waitUntil,
+} = require("../helpers/live");
 
 const ENCHANT_POS = new Vec3(
   Number(process.env.ENCHANT_TEST_X || 24),
@@ -13,91 +25,12 @@ const ENCHANT_POS = new Vec3(
   Number(process.env.ENCHANT_TEST_Z || 24),
 );
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function waitForSpawn(botState, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timeout waiting for spawn")), timeoutMs);
-
-    botState.client.once("spawn", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
-}
-
-async function waitUntil(label, predicate, timeoutMs = 30000, intervalMs = 250) {
-  const start = Date.now();
-  let lastValue;
-
-  while (Date.now() - start < timeoutMs) {
-    lastValue = await predicate();
-    if (lastValue) return lastValue;
-    await sleep(intervalMs);
-  }
-
-  throw new Error(`Timed out waiting for ${label}; last=${JSON.stringify(lastValue, safeJsonReplacer)}`);
-}
-
-function safeJsonReplacer(_, value) {
-  if (typeof value === "bigint") return value.toString();
-  if (Buffer.isBuffer(value)) {
-    return {
-      type: "Buffer",
-      length: value.length,
-      hex: value.toString("hex"),
-    };
-  }
-  return value;
-}
-
-function findSlotByName(botState, name) {
-  const slot = botState.inventory.slots.findIndex((item) => item?.name === name);
-  assert.notStrictEqual(slot, -1, `Could not find ${name} in inventory`);
-  return slot;
-}
-
-function countInventoryItem(botState, name) {
-  return botState.inventory.slots.reduce((total, item) => {
-    if (!item || item.name !== name) return total;
-    return total + item.count;
-  }, 0);
-}
-
-async function waitForInventoryCount(botState, name, count, timeoutMs = 8000) {
-  await waitUntil(
-    `${name} inventory count to become ${count}`,
-    () => countInventoryItem(botState, name) === count,
-    timeoutMs,
-  );
-}
-
 async function waitForExperienceLevel(botState, level, timeoutMs = 8000) {
   await waitUntil(
     `experience level to become at least ${level}`,
     () => botState.experienceLevel >= level ? botState.experienceLevel : false,
     timeoutMs,
   );
-}
-
-async function waitForBlockName(botState, pos, expectedName, timeoutMs = 8000) {
-  return waitUntil(
-    `block ${expectedName} at ${pos}`,
-    async () => {
-      const block = await botState.getBlock(pos);
-      return block?.name === expectedName ? block : false;
-    },
-    timeoutMs,
-  );
-}
-
-async function markLocalBlock(botState, pos, block) {
-  const name = block.replace(/^minecraft:/, "").split("[")[0];
-  const stateId = botState.registry.blocksByName[name]?.defaultState;
-  if (stateId == null || typeof botState.setBlockStateIdAt !== "function") return;
-  await botState.setBlockStateIdAt(pos, stateId);
 }
 
 function bookshelfPositions() {
@@ -172,34 +105,6 @@ async function setupEnchantingWorld(botState) {
 
   await waitForInventoryCount(botState, "diamond_sword", 1);
   await waitForInventoryCount(botState, "lapis_lazuli", 3);
-}
-
-function itemSignature(item) {
-  if (!item) return null;
-
-  return JSON.stringify(
-    {
-      type: item.type,
-      name: item.name,
-      count: item.count,
-      metadata: item.metadata,
-      nbt: item.nbt,
-      rawExtra: item.raw?.extra,
-    },
-    safeJsonReplacer,
-  );
-}
-
-function itemSummary(item) {
-  if (!item) return null;
-
-  return {
-    name: item.name,
-    count: item.count,
-    metadata: item.metadata,
-    nbt: item.nbt,
-    raw: item.raw,
-  };
 }
 
 describe("live enchanting integration", function () {

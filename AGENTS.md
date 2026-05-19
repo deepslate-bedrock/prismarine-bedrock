@@ -26,4 +26,14 @@ This repo is the clean base library for `prismarine-bedrock`. Keep changes focus
 
 Use `src/version.js` for the default Bedrock protocol version and helpers. The default client/protocol version is `1.26.10`; shorthand `26.10` is normalized to `1.26.10`.
 
+Use the installed `minecraft-data` Bedrock files under `node_modules/minecraft-data/minecraft-data/data/bedrock/<MC_VERSION>/` for exact packet shapes. When this repo is checked out through `prismarine-bedrock-workspace`, shared reference checkouts may also be available under the workspace root `ref/` directory:
+
+- `ref/minecraft-data/`: upstream data source history.
+- `ref/bedrock-protocol-docs/`: Mojang Bedrock protocol field semantics.
+- `ref/gophertunnel/`: Bedrock protocol implementation context.
+- `ref/geyser/`: Java/Bedrock translation behavior.
+- `ref/boar/`: Geyser Bedrock-player prediction and movement reference.
+
+Treat `ref/` checkouts as inspection-only external sources. Do not copy source from them into this library as a substitute for verifying the installed serializer schema and local tests.
+
 Before testing new packet send/receive shapes against a server, round-trip representative packets with `scripts/roundtrip-packet.js` when applicable.

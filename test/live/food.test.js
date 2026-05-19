@@ -15,50 +15,16 @@ const {
   VERSION,
   SETUP_DELAY_MS
 } = require('../helpers/test-env')
-
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-
-function waitForSpawn (botState, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Timeout waiting for spawn')), timeoutMs)
-    botState.client.once('spawn', () => {
-      clearTimeout(timeout)
-      resolve()
-    })
-  })
-}
+const {
+  findSlotByName,
+  observeQueuedPackets,
+  sleep,
+  waitForSpawn,
+  waitUntil
+} = require('../helpers/live')
 
 async function waitForPredicate (predicate, label, timeoutMs = 10000, intervalMs = 100) {
-  const started = Date.now()
-  while (Date.now() - started < timeoutMs) {
-    const value = predicate()
-    if (value) return value
-    await sleep(intervalMs)
-  }
-  throw new Error(`Timed out waiting for ${label}`)
-}
-
-function findSlotByName (botState, name) {
-  const slot = botState.inventory.slots.findIndex(item => item?.name === name)
-  assert.notStrictEqual(slot, -1, `Could not find ${name} in inventory`)
-  return slot
-}
-
-function observeQueuedPackets (client) {
-  const queued = []
-  const originalQueue = client.queue.bind(client)
-
-  client.queue = (name, params) => {
-    queued.push({ name, params })
-    return originalQueue(name, params)
-  }
-
-  return {
-    queued,
-    restore () {
-      client.queue = originalQueue
-    }
-  }
+  return waitUntil(label, predicate, timeoutMs, intervalMs)
 }
 
 async function setupFood (botState) {
