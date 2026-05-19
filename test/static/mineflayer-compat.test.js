@@ -136,6 +136,27 @@ describe('mineflayer compatibility facade', function () {
     assert.strictEqual(state.self.yaw, 180)
   })
 
+  it('passes bot.dig through to the native dig helper', function () {
+    const state = createCompatState()
+    let digCalls = 0
+    state.dig = (block, forceLook) => { digCalls++; return Promise.resolve({ block, forceLook }) }
+    state.canDigBlock = (block) => !!block?.diggable
+    state.digTime = () => 100
+
+    mineflayerCompatPlugin(state)
+    const bot = state.asMineflayerBot()
+
+    assert.strictEqual(typeof bot.dig, 'function', 'bot.dig should be exposed via the facade')
+    assert.strictEqual(typeof bot.canDigBlock, 'function', 'bot.canDigBlock should be exposed via the facade')
+    const dummyBlock = { position: new Vec3(1, 2, 3), name: 'stone', diggable: true, hardness: 1.5 }
+    return bot.dig(dummyBlock, true).then((result) => {
+      assert.strictEqual(digCalls, 1, 'native dig was called')
+      assert.strictEqual(result.block, dummyBlock)
+      assert.strictEqual(result.forceLook, true)
+      assert.strictEqual(bot.canDigBlock(dummyBlock), true)
+    })
+  })
+
   it('loads upstream mineflayer-pathfinder against the facade', function () {
     const state = createCompatState()
     mineflayerCompatPlugin(state)
