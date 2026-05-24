@@ -111,6 +111,13 @@ module.exports = (botState, options) => {
     }
   }
 
+  function loadLocalStateBlockRuntimeIds() {
+    for (const [stateIdKey, block] of Object.entries(registry.blocksByStateId ?? {})) {
+      const stateId = Number(stateIdKey);
+      setRuntimeBlock(stateId, { ...block, stateId });
+    }
+  }
+
   function loadLiveBlockRuntimeIds(blockProperties, useHashes) {
     if (!Array.isArray(blockProperties)) return;
 
@@ -131,11 +138,18 @@ module.exports = (botState, options) => {
   function loadBlockNetworkRuntimeIds(packet) {
     const useHashes = !!packet.block_network_ids_are_hashes;
     const hasLiveRuntimePalette = Array.isArray(packet.block_properties) && packet.block_properties.length > 0;
+    const idsAreLocalStateIds = !useHashes && !hasLiveRuntimePalette;
 
     botState.protocolState.hasLiveBlockRuntimePalette = hasLiveRuntimePalette;
+    botState.protocolState.blockNetworkRuntimeIdsAreStateIds = idsAreLocalStateIds;
+    registry.blockNetworkRuntimeIdsAreStateIds = idsAreLocalStateIds;
     registry.blocksByRuntimeId = {};
     registry.blockNetworkRuntimeIdsByStateId = {};
-    loadVersionedBlockRuntimeIds(useHashes);
+    if (idsAreLocalStateIds) {
+      loadLocalStateBlockRuntimeIds();
+    } else {
+      loadVersionedBlockRuntimeIds(useHashes);
+    }
     loadLiveBlockRuntimeIds(packet.block_properties, useHashes);
   }
 

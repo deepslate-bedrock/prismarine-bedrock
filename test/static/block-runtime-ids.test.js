@@ -116,4 +116,45 @@ describe('block runtime id mapping', function () {
     assert.strictEqual(registry.blocksByRuntimeId[bedrockRuntimeId].stateId, bedrockStateId)
     assert.strictEqual(registry.blocksByStateId[bedrockStateId].name, 'bedrock')
   })
+
+  it('treats non-hash runtime IDs as local state IDs when start_game has no live palette', function () {
+    const registry = require('prismarine-registry')('bedrock_1.26.10')
+    const Block = require('prismarine-block')(registry)
+    const client = new EventEmitter()
+    const botState = {
+      client,
+      registry,
+      blockClass: Block,
+      game: {},
+      setDimension (dimension) {
+        this.game.dimension = dimension
+      }
+    }
+
+    setupPlugin(botState, {})
+
+    client.emit('start_game', {
+      entity_id: 1n,
+      runtime_entity_id: 1n,
+      player_position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, z: 0 },
+      player_gamemode: 'creative',
+      dimension: 0,
+      block_network_ids_are_hashes: false,
+      server_authoritative_inventory: true,
+      itemstates: [],
+      block_properties: []
+    })
+
+    const airStateId = registry.blocksByName.air.defaultState
+    const stoneStateId = registry.blocksByName.stone.defaultState
+
+    assert.strictEqual(botState.protocolState.blockNetworkRuntimeIdsAreStateIds, true)
+    assert.strictEqual(registry.blockNetworkRuntimeIdsAreStateIds, true)
+    assert.strictEqual(registry.blocksByRuntimeId[airStateId].stateId, airStateId)
+    assert.strictEqual(registry.blocksByRuntimeId[airStateId].name, 'air')
+    assert.strictEqual(registry.blocksByRuntimeId[stoneStateId].stateId, stoneStateId)
+    assert.strictEqual(registry.blocksByRuntimeId[stoneStateId].name, 'stone')
+    assert.strictEqual(registry.blockNetworkRuntimeIdsByStateId[airStateId], airStateId)
+  })
 })

@@ -26,6 +26,99 @@ const PHYSICS_ENGINE = process.env.PATHFINDER_PHYSICS_ENGINE || process.env.BEDR
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
+function blockNameMatches (actual, expected) {
+  const normalize = value => String(value || '').replace(/^minecraft:/, '')
+  return normalize(actual) === normalize(expected)
+}
+
+function isPhysicalBlock (block) {
+  return block?.boundingBox === 'block' || (Array.isArray(block?.shapes) && block.shapes.length > 0)
+}
+
+function blockAt (botState, pos) {
+  const getter = botState.world?.sync?.getBlock || botState.world?.getBlock
+  if (typeof getter !== 'function') return null
+  const block = getter.call(botState.world?.sync || botState.world, pos)
+  if (block && typeof block.then === 'function') return null
+  return block || null
+}
+
+async function waitForWorldBlock (botState, pos, blockName, timeoutMs = 5000) {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    const block = blockAt(botState, pos)
+    if (blockNameMatches(block?.name, blockName)) return block
+    await sleep(50)
+  }
+
+  const block = blockAt(botState, pos)
+  throw new Error(`Timed out waiting for pathfinder course block ${blockName} at ${pos.x},${pos.y},${pos.z}; got ${block?.name || 'missing'}`)
+}
+
+async function waitForAirBlock (botState, pos, timeoutMs = 5000) {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    const block = blockAt(botState, pos)
+    if (block?.boundingBox === 'empty') return block
+    await sleep(50)
+  }
+
+  const block = blockAt(botState, pos)
+  throw new Error(`Timed out waiting for pathfinder air at ${pos.x},${pos.y},${pos.z}; got ${block?.name || 'missing'} bbox=${block?.boundingBox || 'missing'}`)
+}
+
+async function waitForPhysicalBlock (botState, pos, timeoutMs = 5000) {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    const block = blockAt(botState, pos)
+    if (isPhysicalBlock(block)) return block
+    await sleep(50)
+  }
+
+  const block = blockAt(botState, pos)
+  throw new Error(`Timed out waiting for pathfinder support at ${pos.x},${pos.y},${pos.z}; got ${block?.name || 'missing'} bbox=${block?.boundingBox || 'missing'}`)
+}
+
+function summarizeBlock (botState, pos) {
+  const block = blockAt(botState, pos)
+  return {
+    pos: `${pos.x},${pos.y},${pos.z}`,
+    name: block?.name || null,
+    type: block?.type ?? null,
+    boundingBox: block?.boundingBox || null,
+    shapes: Array.isArray(block?.shapes) ? block.shapes.length : null
+  }
+}
+
+function pathfinderWorldDebug (botState, target) {
+  const feet = feetPosition(botState)?.floored()
+  const positions = []
+  if (feet) {
+    positions.push(feet, feet.offset(0, -1, 0), feet.offset(1, 0, 0), feet.offset(1, -1, 0), feet.offset(0, 1, 0))
+  }
+  positions.push(target, target.offset(0, -1, 0), target.offset(0, 1, 0))
+
+  let neighborCount = null
+  try {
+    const movements = botState.pathfinder?.movements
+    if (feet && movements?.getNeighbors) {
+      neighborCount = movements.getNeighbors({
+        x: feet.x,
+        y: feet.y,
+        z: feet.z,
+        remainingBlocks: movements.countScaffoldingItems?.() ?? 0
+      }).length
+    }
+  } catch (err) {
+    neighborCount = `error:${err.message}`
+  }
+
+  return `world=${JSON.stringify({ neighborCount, blocks: positions.map(pos => summarizeBlock(botState, pos)) })}`
+}
+
 function waitForSpawn (botState, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`Timeout waiting for ${botState.options.username} spawn`)), timeoutMs)
@@ -126,6 +219,7 @@ async function placeBlocks (botState, positions, block, delayMs = 25) {
   for (const pos of positions) {
     sendCommand(botState, `setblock ${pos.x} ${pos.y} ${pos.z} ${block}`)
     if (delayMs > 0) await sleep(delayMs)
+    await waitForWorldBlock(botState, pos, block)
   }
 }
 
@@ -224,8 +318,19 @@ async function goToBlock (botState, target, options = {}) {
   const debugInfo = options.debugInfo || (() => '')
   const timeoutMs = options.timeoutMs ?? 20000
   if (GOAL_DELAY_MS > 0) await sleep(GOAL_DELAY_MS)
+  const start = feetPosition(botState)?.floored()
+  if (start) {
+    await waitForAirBlock(botState, start)
+    await waitForPhysicalBlock(botState, start.offset(0, -1, 0))
+  }
+  await waitForAirBlock(botState, target)
+  await waitForPhysicalBlock(botState, target.offset(0, -1, 0))
   botState.pathfinder.setGoal(new goals.GoalBlock(target.x, target.y, target.z))
-  await waitForFeetInsideBlock(botState, target, timeoutMs, debugInfo)
+  await waitForFeetInsideBlock(botState, target, timeoutMs, () => {
+    const base = debugInfo()
+    const world = pathfinderWorldDebug(botState, target)
+    return base ? `${base} ${world}` : world
+  })
   botState.pathfinder.stop()
   botState.clearControlStates()
 }

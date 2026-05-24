@@ -409,7 +409,7 @@ describe('world readiness helpers', function () {
     assert.strictEqual(updates[0].stateId, 123)
   })
 
-  it('keeps non-hash update_block IDs as local state IDs when no live server palette exists', async function () {
+  it('uses the registry runtime map for non-hash update_block IDs', async function () {
     const updates = []
     const botState = createBotState()
 
@@ -420,7 +420,7 @@ describe('world readiness helpers', function () {
         2533: { name: 'stone' }
       },
       blocksByRuntimeId: {
-        2533: { stateId: 2534, name: 'smooth_sandstone_slab' }
+        2533: { stateId: 2533, name: 'stone' }
       }
     }
     botState.world.getColumnAt = async () => ({})

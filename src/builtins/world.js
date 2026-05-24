@@ -753,22 +753,6 @@ module.exports = (botState, options = {}) => {
 
   // ── Single block updates ──
   function blockUpdateStateId(blockRuntimeId) {
-    if (
-      !botState.protocolState.blockNetworkIdsAreHashes &&
-      !botState.protocolState.hasLiveBlockRuntimePalette &&
-      registry.blocksByStateId?.[blockRuntimeId]
-    ) {
-      // Geyser may omit start_game.block_properties while still sending
-      // non-hash block_runtime_id values in update_block packets. Those
-      // values describe Geyser's own Java-translated Bedrock palette, which
-      // can drift from this package's installed minecraft-data blockStates
-      // order. Without a live palette, remapping through blocksByRuntimeId can
-      // shift IDs by a state or more (stone became smooth_sandstone_slab in
-      // the container trace). The only stable local value available in this
-      // mode is the numeric state ID already carried by the packet.
-      return blockRuntimeId;
-    }
-
     return getStateId(registry, blockRuntimeId);
   }
 
