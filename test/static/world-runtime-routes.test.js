@@ -178,11 +178,13 @@ async function waitForBlockAt (botState, pos, blockName, timeoutMs = 500) {
 const SERVER_MODES = [
   {
     name: 'Endstone hash runtime IDs',
-    hashes: true
+    hashes: true,
+    expectsTeleportSubchunkRequests: true
   },
   {
     name: 'Geyser local-state runtime IDs',
-    hashes: false
+    hashes: false,
+    expectsTeleportSubchunkRequests: false
   }
 ]
 
@@ -210,6 +212,31 @@ describe('world runtime mapping routes', function () {
         const block = subchunk.getBlock(undefined, 0, 0, 0, 0)
         assert.strictEqual(block.name, 'air')
         assert.strictEqual(block.stateId, stateIdFor(botState, 'air'))
+      })
+
+      it('uses the server-specific teleport chunk reporting pattern', function () {
+        const botState = (currentBotState = createWorldBotState(context))
+
+        botState.client.emit('move_player', {
+          runtime_id: 1,
+          position: { x: 17.5, y: 81.62, z: 16.5 },
+          mode: 'teleport'
+        })
+
+        const radiusRequest = botState.client.queued.find(packet => packet.name === 'request_chunk_radius')
+        const subchunkRequests = botState.client.queued.filter(packet => packet.name === 'subchunk_request')
+
+        assert.ok(radiusRequest)
+        assert.strictEqual(subchunkRequests.length > 0, mode.expectsTeleportSubchunkRequests)
+
+        if (mode.expectsTeleportSubchunkRequests) {
+          assert.deepStrictEqual(subchunkRequests[0].params.origin, { x: 0, y: 5, z: 0 })
+          assert.deepStrictEqual(subchunkRequests[0].params.requests, [
+            { dx: 0, dy: -1, dz: 0 },
+            { dx: 0, dy: 0, dz: 0 },
+            { dx: 0, dy: 1, dz: 0 }
+          ])
+        }
       })
 
       it('decodes non-cached subchunk packets through the world route', async function () {
