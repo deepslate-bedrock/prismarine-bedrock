@@ -2,11 +2,14 @@
 
 const { Vec3 } = require('vec3')
 const { bedrockRegistryName } = require('../version')
+const { getConstants } = require('./physics-constants')
+const { createPathfinderPhysicsShim } = require('./physics/pathfinder-physics-shim')
 
 const FACADE = Symbol('mineflayerCompatFacade')
 const ENTITY_FACADE = Symbol('mineflayerCompatEntityFacade')
 const REGISTRY_FACADE = Symbol('mineflayerCompatRegistryFacade')
 const EVENT_BRIDGES = Symbol('mineflayerCompatEventBridges')
+const PATHFINDER_PHYSICS = Symbol('mineflayerCompatPathfinderPhysics')
 
 const EVENT_NAME_ALIASES = {
   physicTick: 'physicsTick'
@@ -405,6 +408,25 @@ function mineflayerDataVersion (botState) {
   return bedrockRegistryName(botState.version || botState.options?.version)
 }
 
+// Real bedrock physics bridged into the bot.physics interface pathfinder
+// consumes. Falls back to the cheap heuristic shim below if the bedrock
+// constants aren't available (e.g. very early in startup before version is
+// resolved).
+function getPathfinderPhysics (botState) {
+  if (botState[PATHFINDER_PHYSICS]) return botState[PATHFINDER_PHYSICS]
+  try {
+    const version = botState.version || botState.options?.version
+    if (!version) return null
+    const C = getConstants(version)
+    if (!C) return null
+    const shim = createPathfinderPhysicsShim(botState, C)
+    botState[PATHFINDER_PHYSICS] = shim
+    return shim
+  } catch {
+    return null
+  }
+}
+
 function createSimplePhysicsShim (botState) {
   return {
     simulatePlayer (state) {
@@ -592,9 +614,9 @@ function createMineflayerFacade (botState) {
       if (prop === 'getEquipmentDestSlot') return destination => getEquipmentDestSlotCompat(target, destination)
       if (prop === 'placeBlock') return (referenceBlock, faceVector) => placeBlockCompat(target, referenceBlock, faceVector)
       if (prop === '_placeBlockWithOptions') return (referenceBlock, faceVector, options) => placeBlockWithOptionsCompat(target, referenceBlock, faceVector, options)
-      if (prop === 'physics') return target.physics || createSimplePhysicsShim(target)
+      if (prop === 'physics') return target.physics || getPathfinderPhysics(target) || createSimplePhysicsShim(target)
       if (prop === 'look') {
-        return (yaw, pitch = 0, force = false) => target.look?.(mineflayerYawToBedrockDegrees(yaw), radiansToDegrees(pitch), force)
+        return (yaw, pitch = 0, force = true) => target.look?.(mineflayerYawToBedrockDegrees(yaw), radiansToDegrees(pitch), force)
       }
       if (prop === 'on' || prop === 'addListener' || prop === 'prependListener' || prop === 'removeListener' || prop === 'off') return eventMethod(target, prop)
       if (prop === 'once') return (eventName, listener) => oncePromiseOrListener(target, eventName, listener)
