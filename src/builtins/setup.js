@@ -50,6 +50,9 @@ module.exports = (botState, options) => {
   // ── Shared state for respawn ──
   botState.lifecycle.isDead = false;
   botState.lifecycle.respawnTimeout = null;
+  botState.lifecycle.lastRespawnPosition = null;
+  botState.lifecycle.sentDeathRespawnReady = false;
+  botState.lifecycle.sentDeathRespawnAction = false;
   botState.playerState.health = null;
   botState.playerState.experience = 0;
   botState.playerState.experienceLevel = 0;
@@ -308,6 +311,7 @@ module.exports = (botState, options) => {
       isDead: botState.lifecycle.isDead,
     });
     if (botState.playerState.health > 0 && botState.lifecycle.isDead) {
+      clearRespawnState();
       botState.lifecycle.isDead = false;
       logAction('[→]', 'set_health -> alive');
     }
@@ -338,6 +342,9 @@ module.exports = (botState, options) => {
     if (botState.lifecycle.isDead) return;
     botState.lifecycle.isDead = true;
     botState.playerState.health = 0;
+    botState.lifecycle.lastRespawnPosition = null;
+    botState.lifecycle.sentDeathRespawnReady = false;
+    botState.lifecycle.sentDeathRespawnAction = false;
     logAction('[←]', 'death_info', {
       cause: packet.cause,
       message: packet.messages?.[0],
@@ -349,33 +356,26 @@ module.exports = (botState, options) => {
   client.on('respawn', (packet) => {
     logAction('[←]', 'respawn', { state: packet.state, position: packet.position });
 
-    clearTimeout(botState.lifecycle.respawnTimeout);
-
     if (packet.state === 0) {
-      // Server sent state 0 (dimension change or death response) – ack with state 1
-      logAction('[→]', 'respawn(state=1 ack)');
-      client.queue('respawn', {
-        position: packet.position,
-        state: 1,
-        runtime_entity_id: client.entityId,
-      });
-
-      botState.lifecycle.respawnTimeout = setTimeout(() => {
-        logAction('[→]', 'respawn(state=2) fallback after server state=0');
-        client.queue('respawn', {
-          position: packet.position,
-          state: 2,
-          runtime_entity_id: client.entityId,
-        });
-        client.queue('set_local_player_as_initialized', {
-          runtime_entity_id: client.entityId,
-        });
-      }, 2000);
+      // Server is still searching for a spawn point. Wait for state 1 before
+      // completing the handshake with the client-ready state. Do not clear the
+      // pending death-screen respawn request here: BDS may send this before the
+      // bot's auto-respawn timer fires.
+      botState.lifecycle.lastRespawnPosition = packet.position;
+      logAction('[←]', 'respawn(state=0 searching)');
       return;
     }
 
     if (packet.state === 1) {
       clearTimeout(botState.lifecycle.respawnTimeout);
+      botState.lifecycle.lastRespawnPosition = packet.position;
+
+      if (botState.lifecycle.isDead) {
+        sendDeathRespawnReady();
+        sendDeathRespawnAction();
+        return;
+      }
+
       logAction('[→]', 'respawn(state=2 ack) + set_local_player_as_initialized');
       client.queue('respawn', {
         position: packet.position,
@@ -395,6 +395,7 @@ module.exports = (botState, options) => {
   client.on('spawn', () => {
     if (botState.lifecycle.isDead) {
       logAction('[←]', 'spawn', { msg: 'respawn completed' });
+      clearRespawnState();
       botState.lifecycle.isDead = false;
       botState.playerState.health = 20;
     } else {
@@ -422,27 +423,44 @@ module.exports = (botState, options) => {
         logAction('[→]', 'respawn', { msg: 'skipped – already alive' });
         return;
       }
-      // Start respawn with state=0 (request to server)
-      logAction('[→]', 'respawn(state=0) request');
-      client.queue('respawn', {
-        position: { x: 0, y: 0, z: 0 },
-        state: 0,
-        runtime_entity_id: client.entityId,
-      });
+      sendDeathRespawnReady();
 
-      // Fallback: if no server reply within 1.5s, force state=2 + init
       botState.lifecycle.respawnTimeout = setTimeout(() => {
         if (!botState.lifecycle.isDead) return;
-        logAction('[→]', 'respawn(state=2) fallback after no server state=1 response');
-        client.queue('respawn', {
-          position: { x: 0, y: 0, z: 0 },
-          state: 2,
-          runtime_entity_id: client.entityId,
-        });
-        client.queue('set_local_player_as_initialized', {
-          runtime_entity_id: client.entityId,
-        });
-      }, 1500);
+        sendDeathRespawnAction();
+      }, 5000);
     }, delay);
+  }
+
+  function sendDeathRespawnReady() {
+    if (botState.lifecycle.sentDeathRespawnReady) return;
+    botState.lifecycle.sentDeathRespawnReady = true;
+    logAction('[→]', 'respawn(state=2) death-screen ready');
+    client.queue('respawn', {
+      position: { x: 0, y: 0, z: 0 },
+      state: 2,
+      runtime_entity_id: client.entityId,
+    });
+  }
+
+  function sendDeathRespawnAction() {
+    if (botState.lifecycle.sentDeathRespawnAction) return;
+    botState.lifecycle.sentDeathRespawnAction = true;
+    logAction('[→]', 'player_action(respawn) request');
+    client.queue('player_action', {
+      runtime_entity_id: client.entityId,
+      action: 'respawn',
+      position: { x: 0, y: 0, z: 0 },
+      result_position: { x: 0, y: 0, z: 0 },
+      face: -1,
+    });
+  }
+
+  function clearRespawnState() {
+    clearTimeout(botState.lifecycle.respawnTimeout);
+    botState.lifecycle.respawnTimeout = null;
+    botState.lifecycle.lastRespawnPosition = null;
+    botState.lifecycle.sentDeathRespawnReady = false;
+    botState.lifecycle.sentDeathRespawnAction = false;
   }
 };
