@@ -54,6 +54,18 @@ function degreesToRadians (degrees) {
   return (degrees * Math.PI) / 180
 }
 
+function wrapDegrees (degrees) {
+  const value = numberOrZero(degrees)
+  let wrapped = value % 360
+  if (wrapped >= 180) wrapped -= 360
+  if (wrapped < -180) wrapped += 360
+  return numberOrZero(wrapped)
+}
+
+function clampPitch (pitch) {
+  return Math.max(-90, Math.min(90, numberOrZero(pitch)))
+}
+
 function cameraOrientationFromRotation (yaw, pitch) {
   const yawRad = degreesToRadians(numberOrZero(yaw))
   const pitchRad = degreesToRadians(numberOrZero(pitch))
@@ -133,8 +145,8 @@ function createMovementPacketSender (botState, C, options = {}) {
     const analogueMoveVector = self.analogueMoveVector || moveVector
     const rawMoveVector = self.rawMoveVector || moveVector
 
-    const sentPitch = numberOrZero(lastSentPitch)
-    const sentYaw = numberOrZero(lastSentYaw)
+    const sentPitch = clampPitch(lastSentPitch)
+    const sentYaw = wrapDegrees(lastSentYaw)
     const cameraOrientation = cameraOrientationFromRotation(sentYaw, sentPitch)
     const inputData = normalizeInputData(self.inputData || 0n, inputFlagByBit(C))
     inputData.block_breaking_delay_enabled = true
@@ -202,9 +214,9 @@ function createMovementPacketSender (botState, C, options = {}) {
         y: numberOrZero(self.position.y),
         z: numberOrZero(self.position.z),
       },
-      pitch: numberOrZero(lastSentPitch),
-      yaw: numberOrZero(lastSentYaw),
-      head_yaw: numberOrZero(lastSentYaw),
+      pitch: clampPitch(lastSentPitch),
+      yaw: wrapDegrees(lastSentYaw),
+      head_yaw: wrapDegrees(lastSentYaw),
       mode,
       on_ground: !!self.onGround,
       ridden_runtime_id: 0,

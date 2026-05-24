@@ -131,6 +131,42 @@ describe('runtime options', function () {
     )
   })
 
+  it('acks Boar network latency challenges with client timestamp magnitude', function () {
+    const botState = createSetupBotState()
+
+    setupPlugin(botState, {})
+    botState.client.emit('network_stack_latency', {
+      timestamp: BigInt.asUintN(64, -123n),
+      needs_response: 1
+    })
+
+    assert.deepStrictEqual(botState.client.queued.at(-1), {
+      name: 'network_stack_latency',
+      params: {
+        timestamp: BigInt.asUintN(64, -123000000n),
+        needs_response: 0
+      }
+    })
+  })
+
+  it('echoes normal network latency challenges unchanged', function () {
+    const botState = createSetupBotState()
+
+    setupPlugin(botState, {})
+    botState.client.emit('network_stack_latency', {
+      timestamp: 123456789n,
+      needs_response: 1
+    })
+
+    assert.deepStrictEqual(botState.client.queued.at(-1), {
+      name: 'network_stack_latency',
+      params: {
+        timestamp: 123456789n,
+        needs_response: 0
+      }
+    })
+  })
+
   it('keeps dimension handling available when world decoding is disabled', function () {
     const bot = new BotState({
       username: 'RuntimeOptionsBot',

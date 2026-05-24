@@ -19,6 +19,20 @@ function plainBlockStates(states = {}) {
   );
 }
 
+function latencyTimestampToBigInt(timestamp) {
+  if (typeof timestamp === 'bigint') return timestamp;
+  return BigInt(timestamp);
+}
+
+function networkStackLatencyResponseTimestamp(timestamp) {
+  const signedTimestamp = BigInt.asIntN(64, latencyTimestampToBigInt(timestamp));
+  const responseTimestamp = signedTimestamp >= -5000000n && signedTimestamp <= 5000000n
+    ? signedTimestamp * 1000000n
+    : signedTimestamp;
+
+  return BigInt.asUintN(64, responseTimestamp);
+}
+
 /**
  * Unified plugin: handles initial login sequence AND respawn after death.
  * @param {import('../state')} botState
@@ -148,6 +162,15 @@ module.exports = (botState, options) => {
 
   client.on('connect_allowed', () => {
     logAction('[→]', 'connect', { host: options.host, port: options.port });
+  });
+
+  client.on('network_stack_latency', (packet) => {
+    if (!packet.needs_response && !packet.needsResponse) return;
+
+    client.queue('network_stack_latency', {
+      timestamp: networkStackLatencyResponseTimestamp(packet.timestamp),
+      needs_response: 0,
+    });
   });
 
   // ── Start Game ──
