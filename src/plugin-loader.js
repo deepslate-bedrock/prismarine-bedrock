@@ -3,7 +3,9 @@ const path = require('path')
 
 const loaderStates = new WeakMap()
 const builtinLoadPriority = {
-  'world.js': -100
+  'world.js': -100,
+  'setup.js': -90,
+  'respawn.js': -80
 }
 
 function ensureState (botState) {

@@ -4,12 +4,16 @@ const assert = require('assert')
 const BotState = require('../../src/state')
 const {
   bedrockPlayerName,
+  clearPlayer,
+  currentCommandTargetFamily,
+  givePlayer,
   sendCommand,
   setPlayerGamemode,
   teleportPlayer
 } = require('../helpers/commands')
 const {
   captureQueuedPackets,
+  countInventoryItem,
   sleep,
   waitForSpawn,
   waitUntil
@@ -27,6 +31,7 @@ function observeRespawnSignals (botState) {
   const signals = {
     deaths: 0,
     reviveHealthPackets: 0,
+    respawnEntityEvents: 0,
     inboundRespawnStates: []
   }
 
@@ -39,10 +44,14 @@ function observeRespawnSignals (botState) {
   const onRespawn = (packet) => {
     signals.inboundRespawnStates.push(packet.state)
   }
+  const onEntityEvent = (packet) => {
+    if ((packet.event ?? packet.event_id) === 'respawn') signals.respawnEntityEvents++
+  }
 
   botState.client.on('death_info', onDeathInfo)
   botState.client.on('set_health', onSetHealth)
   botState.client.on('respawn', onRespawn)
+  botState.client.on('entity_event', onEntityEvent)
 
   return {
     signals,
@@ -50,8 +59,28 @@ function observeRespawnSignals (botState) {
       botState.client.off('death_info', onDeathInfo)
       botState.client.off('set_health', onSetHealth)
       botState.client.off('respawn', onRespawn)
+      botState.client.off('entity_event', onEntityEvent)
     }
   }
+}
+
+function completedRespawns (signals) {
+  return signals.reviveHealthPackets + signals.respawnEntityEvents
+}
+
+function gameRuleName (name) {
+  if (currentCommandTargetFamily() !== 'geyser') return name
+  if (name === 'keepinventory') return 'keepInventory'
+  if (name === 'doimmediaterespawn') return 'doImmediateRespawn'
+  return name
+}
+
+function setGameRule (botState, name, value) {
+  sendCommand(botState, `gamerule ${gameRuleName(name)} ${value}`)
+}
+
+function shouldAssertInventoryPreserved () {
+  return currentCommandTargetFamily() !== 'geyser'
 }
 
 describe('live respawn handling', function () {
@@ -74,7 +103,7 @@ describe('live respawn handling', function () {
 
   after(function () {
     if (!botState?.client) return
-    sendCommand(botState, `gamerule keepinventory false`)
+    setGameRule(botState, 'keepinventory', false)
     botState.disconnect('live respawn handling test complete')
   })
 
@@ -83,15 +112,27 @@ describe('live respawn handling', function () {
     const capture = captureQueuedPackets(botState)
 
     try {
-      sendCommand(botState, 'gamerule keepinventory true')
+      setGameRule(botState, 'keepinventory', true)
       setPlayerGamemode(botState, USERNAME, 'survival')
       sendCommand(botState, `effect ${bedrockPlayerName(USERNAME)} clear`)
+      clearPlayer(botState, USERNAME)
+      await sleep(SETUP_DELAY_MS)
+      givePlayer(botState, USERNAME, 'dirt', 3)
       teleportPlayer(botState, USERNAME, 0, 65, 0)
       await sleep(SETUP_DELAY_MS)
+      await waitUntil(
+        'dirt kept in inventory before respawn cycles',
+        () => countInventoryItem(botState, 'dirt') === 3,
+        10000,
+        100,
+        botState
+      )
+      botState.setControlState('forward', true)
+      botState.setControlState('sprint', true)
 
       for (let cycle = 1; cycle <= 3; cycle++) {
         const beforeDeaths = observer.signals.deaths
-        const beforeRevives = observer.signals.reviveHealthPackets
+        const beforeCompletedRespawns = completedRespawns(observer.signals)
         const beforeQueuedRespawns = capture.queued.length
 
         sendCommand(botState, `kill ${bedrockPlayerName(USERNAME)}`)
@@ -106,7 +147,7 @@ describe('live respawn handling', function () {
 
         await waitUntil(
           `server-confirmed revive for respawn cycle ${cycle}`,
-          () => observer.signals.reviveHealthPackets > beforeRevives && !botState.lifecycle.isDead,
+          () => completedRespawns(observer.signals) > beforeCompletedRespawns && !botState.lifecycle.isDead,
           20000,
           100,
           botState
@@ -125,17 +166,60 @@ describe('live respawn handling', function () {
           queuedRespawnStates.some(state => state === 0 || state === 1 || state === 2),
           `cycle ${cycle} queued unexpected respawn states ${queuedRespawnStates.join(',')}`
         )
+        if (shouldAssertInventoryPreserved()) {
+          assert.strictEqual(
+            countInventoryItem(botState, 'dirt'),
+            3,
+            `cycle ${cycle} did not preserve dirt across respawn`
+          )
+        }
 
         await sleep(500)
       }
 
       assert.strictEqual(observer.signals.deaths, 3)
       assert(
-        observer.signals.reviveHealthPackets >= 3,
-        `expected at least 3 revive health packets, saw ${observer.signals.reviveHealthPackets}`
+        completedRespawns(observer.signals) >= 3,
+        `expected at least 3 respawn completions, saw health=${observer.signals.reviveHealthPackets} entity_event=${observer.signals.respawnEntityEvents}`
       )
     } finally {
+      botState.setControlState('forward', false)
+      botState.setControlState('sprint', false)
       capture.restore()
+      observer.cleanup()
+    }
+  })
+
+  it('survives immediate respawn gamerule deaths', async function () {
+    const observer = observeRespawnSignals(botState)
+
+    try {
+      setGameRule(botState, 'doimmediaterespawn', true)
+      setGameRule(botState, 'keepinventory', true)
+      setPlayerGamemode(botState, USERNAME, 'survival')
+      teleportPlayer(botState, USERNAME, 0, 65, 0)
+      await sleep(SETUP_DELAY_MS)
+
+      const beforeDeaths = observer.signals.deaths
+      const beforeCompletedRespawns = completedRespawns(observer.signals)
+      sendCommand(botState, `kill ${bedrockPlayerName(USERNAME)}`)
+
+      await waitUntil(
+        'immediate-respawn death_info',
+        () => observer.signals.deaths > beforeDeaths,
+        10000,
+        100,
+        botState
+      )
+      await waitUntil(
+        'immediate-respawn server-confirmed revive',
+        () => completedRespawns(observer.signals) > beforeCompletedRespawns && !botState.lifecycle.isDead,
+        20000,
+        100,
+        botState
+      )
+    } finally {
+      setGameRule(botState, 'doimmediaterespawn', false)
       observer.cleanup()
     }
   })
