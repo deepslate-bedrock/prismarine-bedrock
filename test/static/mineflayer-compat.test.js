@@ -40,7 +40,7 @@ function createCompatState () {
     effects: {}
   }
   state.entities = new Map()
-  state.players = new Map([[1n, state.self]])
+  state.playerEntities = new Map([[1n, state.self]])
   state.inventory = {
     slots: [
       null,

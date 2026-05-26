@@ -11,7 +11,7 @@ function createBotState () {
   return {
     client,
     self: { runtimeId: 99n, type: 'player' },
-    players: new Map(),
+    playerEntities: new Map(),
     entities: new Map(),
     emit: EventEmitter.prototype.emit,
     on: EventEmitter.prototype.on,
@@ -70,7 +70,7 @@ describe('emotes builtin', () => {
   it('tracks incoming player emotes', () => {
     const botState = createBotState()
     const player = { runtimeId: 9n, type: 'player' }
-    botState.players.set(9n, player)
+    botState.playerEntities.set(9n, player)
     injectEmotes(botState)
 
     let playerEmote = null

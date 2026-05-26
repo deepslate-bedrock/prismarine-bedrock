@@ -45,6 +45,25 @@ function sameRuntimeId (a, b) {
   }
 }
 
+function formatUuidHex (hex) {
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+function normalizeBedrockUuid (value) {
+  if (typeof value !== 'string') return value
+
+  const hex = value.replace(/-/g, '').toLowerCase()
+  if (!/^[0-9a-f]{32}$/.test(hex)) return value
+
+  const raw = Buffer.from(hex, 'hex')
+  const normalized = Buffer.concat([
+    Buffer.from(raw.subarray(0, 8)).reverse(),
+    Buffer.from(raw.subarray(8, 16)).reverse()
+  ]).toString('hex')
+
+  return formatUuidHex(normalized)
+}
+
 function toPlainId (value) {
   if (typeof value === 'bigint') return value.toString()
   return value
@@ -74,7 +93,9 @@ function entityIds (entity) {
 function findEntityByRuntimeId (botState, runtimeId) {
   const key = toRuntimeId(runtimeId)
   if (key === null) return null
-  return botState.players?.get(key) || botState.entities?.get(key) || null
+  // Prefer live player entities over non-player actors. `players` is kept as
+  // a compatibility alias for older callers and lightweight test fixtures.
+  return botState.playerEntities?.get(key) || botState.players?.get(key) || botState.entities?.get(key) || null
 }
 
 function toVec3f (pos) {
@@ -332,6 +353,7 @@ module.exports = {
   isLoggingEnabled,
   sleep,
   sameRuntimeId,
+  normalizeBedrockUuid,
   toPlainId,
   toRuntimeId,
   entityRuntimeId,

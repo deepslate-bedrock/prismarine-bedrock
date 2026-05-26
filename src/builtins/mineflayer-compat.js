@@ -45,7 +45,7 @@ function entityObjectFromMaps (botState) {
 
   if (botState.self) add(botState.self.runtimeId ?? botState.client?.entityId ?? 'self', botState.self)
   for (const [key, entity] of botState.entities || []) add(key, entity)
-  for (const [key, entity] of botState.players || []) add(key, entity)
+  for (const [key, entity] of botState.playerEntities || botState.players || []) add(key, entity)
 
   return entities
 }

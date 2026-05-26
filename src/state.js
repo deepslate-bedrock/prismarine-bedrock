@@ -113,9 +113,22 @@ class BotState extends EventEmitter {
 
     this.world = new this.worldClass(null);
 
-    // Entity & player storage (populated by entityHandler / playerHandler)
+    // Live entity storage, keyed by Bedrock runtime entity id.
+    // `entities` is for non-player actors; `playerEntities` is for the bot's
+    // own player entity plus other spawned player entities.
     this.entities = new Map();
-    this.players = new Map();
+    this.playerEntities = new Map();
+    Object.defineProperty(this, 'players', {
+      configurable: true,
+      enumerable: false,
+      get: () => this.playerEntities,
+      set: value => { this.playerEntities = value }
+    });
+
+    // Online player-list profile records from player_list packets. These are
+    // not live entities; they are identity/profile records keyed for lookup.
+    this.playerList = new Map();
+    this.playerListByUuid = new Map();
     this.self = null;
   }
 

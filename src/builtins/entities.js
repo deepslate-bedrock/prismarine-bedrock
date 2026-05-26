@@ -21,6 +21,12 @@ module.exports = (botState, options) => {
   const EntityClass = botState.entityClass;
   const Item = botState.itemClass;
 
+  // Live entities are split by actor kind but share Bedrock runtime ids:
+  // - entities: non-player actors, dropped items, mobs, vehicles, etc.
+  // - playerEntities: the local player plus remote players from add_player.
+  botState.entities ??= new Map();
+  botState.playerEntities ??= botState.players ?? new Map();
+
   // Build a name → entity data map from the registry
   const entityDataByName = {};
   if (registry.entitiesArray) {
@@ -64,7 +70,7 @@ module.exports = (botState, options) => {
     }
   }
 
-  // ========== Self entity (from start_game) ==========
+  // ========== Self player entity (from start_game) ==========
   botState.client.on('start_game', (packet) => {
     const entity = new EntityClass(packet.entity_id);
     entity.runtimeId = packet.runtime_entity_id;          // varint64 → BigInt
@@ -81,12 +87,12 @@ module.exports = (botState, options) => {
     applyAbilities(entity, packet.abilities);
 
     botState.self = entity;
-    botState.players.set(packet.runtime_entity_id, entity);
+    botState.playerEntities.set(packet.runtime_entity_id, entity);
 
     logAction('[→]', 'start_game (self)', { id: packet.runtime_entity_id, pos: botState.self.position });
   });
 
-  // ========== Player spawn (other players) ==========
+  // ========== Remote player entities (from add_player) ==========
   botState.client.on('add_player', (packet) => {
     const entity = new EntityClass(packet.unique_id);
     entity.runtimeId = packet.runtime_id;                  // varint64 → BigInt
@@ -109,12 +115,12 @@ module.exports = (botState, options) => {
     entity.platformChatId = packet.platform_chat_id;
     entity.abilities = packet.abilities;
 
-    botState.players.set(packet.runtime_id, entity);
+    botState.playerEntities.set(packet.runtime_id, entity);
     logAction('[→]', 'add_player', { id: packet.runtime_id, username: packet.username });
     botState.emit('playerSpawned', entity);
   });
 
-  // ========== Non‑player spawn ==========
+  // ========== Non-player entity spawn ==========
   botState.client.on('add_entity', (packet) => {
     const ed = lookupEntityData(packet.entity_type);
 
@@ -177,11 +183,11 @@ module.exports = (botState, options) => {
   botState.client.on('remove_entity', (packet) => {
     // packet.entity_id_self is zigzag64, safe to treat as BigInt
     const key = typeof packet.entity_id_self === 'bigint' ? packet.entity_id_self : BigInt(packet.entity_id_self);
-    const entity = botState.entities.get(key) || botState.players.get(key);
+    const entity = botState.entities.get(key) || botState.playerEntities.get(key);
     if (entity) {
       entity.isValid = false;
       botState.entities.delete(key);
-      botState.players.delete(key);
+      botState.playerEntities.delete(key);
       if (botState.self === entity) {
         botState.self = null;
       }
@@ -437,7 +443,7 @@ module.exports = (botState, options) => {
   // Cleanup
   botState.client.on('close', () => {
     botState.entities.clear();
-    botState.players.clear();
+    botState.playerEntities.clear();
     botState.self = null;
   });
 
@@ -464,7 +470,7 @@ module.exports = (botState, options) => {
       }
     }
 
-    for (const [, player] of botState.players) {
+    for (const [, player] of botState.playerEntities) {
       if (player === botState.self || !filter(player)) continue;
       const dist = botState.self.position.distanceSquared(player.position);
       if (dist < bestDistance) {

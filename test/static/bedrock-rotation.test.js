@@ -141,7 +141,7 @@ describe('Bedrock rotation mapping', function () {
     botState.entityClass = TestEntity
     botState.itemClass = { fromNotch: () => null }
     botState.entities = new Map()
-    botState.players = new Map()
+    botState.playerEntities = new Map()
     botState.self = new TestEntity(1n)
     botState.self.pitch = 5
     botState.self.yaw = 25
@@ -169,7 +169,7 @@ describe('Bedrock rotation mapping', function () {
     botState.entityClass = TestEntity
     botState.itemClass = { fromNotch: () => null }
     botState.entities = new Map()
-    botState.players = new Map()
+    botState.playerEntities = new Map()
     botState.self = new TestEntity(1n)
     botState.self.pitch = 5
     botState.self.yaw = 25

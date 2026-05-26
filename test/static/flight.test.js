@@ -38,7 +38,7 @@ function createBot () {
   botState.entityClass = function TestEntity () {}
   botState.itemClass = { fromNotch: () => null }
   botState.entities = new Map()
-  botState.players = new Map()
+  botState.playerEntities = new Map()
   botState.game = { gameMode: 'creative' }
   botState.canSendPlayerAuthInput = true
   botState.world = { sync: { getBlock: () => null } }
