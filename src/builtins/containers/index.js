@@ -8,6 +8,7 @@ const {
   getBlockRuntimeId,
   itemToRaw,
   logAction,
+  raycastBlock,
   sleep,
   toVec3f
 } = require('../../utils')
@@ -76,63 +77,27 @@ function openHeldItemRaw (item, itemClass) {
   return raw
 }
 
-function degreesToRadians (degrees) {
-  return (degrees * Math.PI) / 180
-}
-
-function viewDirectionFromRotation (yaw, pitch) {
-  const yawRad = degreesToRadians(yaw || 0)
-  const pitchRad = degreesToRadians(pitch || 0)
-  const cosPitch = Math.cos(pitchRad)
-
-  return {
-    x: -Math.sin(yawRad) * cosPitch,
-    y: -Math.sin(pitchRad),
-    z: Math.cos(yawRad) * cosPitch
+function blockAt (botState, target) {
+  try {
+    const world = botState.world?.sync || botState.world
+    return world?.getBlock?.(target) ?? null
+  } catch {
+    return null
   }
 }
 
-function rayClickPositionForFace (eye, target, face, yaw, pitch) {
-  const direction = viewDirectionFromRotation(yaw, pitch)
-  const planes = {
-    0: ['y', target.y],
-    1: ['y', target.y + 1],
-    2: ['z', target.z],
-    3: ['z', target.z + 1],
-    4: ['x', target.x],
-    5: ['x', target.x + 1]
-  }
-  const plane = planes[face]
-  if (!plane) return null
-
-  const [axis, value] = plane
-  if (Math.abs(direction[axis]) < 1e-6) return null
-
-  const t = (value - eye[axis]) / direction[axis]
-  if (!Number.isFinite(t) || t < 0) return null
-
-  const hit = {
-    x: eye.x + direction.x * t,
-    y: eye.y + direction.y * t,
-    z: eye.z + direction.z * t
-  }
-  const click = {
-    x: hit.x - target.x,
-    y: hit.y - target.y,
-    z: hit.z - target.z
-  }
-
-  if (
-    click.x < -0.001 || click.x > 1.001 ||
-    click.y < -0.001 || click.y > 1.001 ||
-    click.z < -0.001 || click.z > 1.001
-  ) return null
-
-  return {
-    x: Math.max(0, Math.min(1, click.x)),
-    y: Math.max(0, Math.min(1, click.y)),
-    z: Math.max(0, Math.min(1, click.z))
-  }
+function raycastTargetBlock (botState, target, opts = {}) {
+  const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition
+  return raycastBlock(
+    playerPos,
+    target,
+    botState.self?.yaw ?? 0,
+    botState.self?.pitch ?? 0,
+    {
+      block: opts.block ?? blockAt(botState, target),
+      shapeOverride: opts.shapeOverride
+    }
+  )
 }
 
 module.exports = function containersPlugin (botState, options = {}) {
@@ -209,13 +174,8 @@ module.exports = function containersPlugin (botState, options = {}) {
     const heldSlot = botState.heldItemSlot ?? 0
     const heldItem = botState.inventory?.slots?.[heldSlot] ?? null
     const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition
-    const clickPos = opts.clickPosition ?? rayClickPositionForFace(
-      playerPos,
-      target,
-      face,
-      botState.self?.yaw ?? 0,
-      botState.self?.pitch ?? 0
-    ) ?? clickPositionForFace(face)
+    const rayHit = raycastTargetBlock(botState, target, opts)
+    const clickPos = opts.clickPosition ?? (rayHit?.face === face ? rayHit.clickPosition : null) ?? clickPositionForFace(face)
     const runtimeEntityId = client.entityId ?? botState.self?.runtimeId ?? 0n
 
     client.queue('player_action', {
@@ -317,7 +277,8 @@ module.exports = function containersPlugin (botState, options = {}) {
 
   async function openContainer (pos, opts = {}) {
     const target = pos instanceof Vec3 ? pos : new Vec3(pos.x, pos.y, pos.z)
-    const face = opts.face ?? blockFace(botState, target)
+    let face = opts.face
+    const initialFace = face ?? blockFace(botState, target)
     const openPromise = waitForContainerOpen(packet => {
       if (!opts.type) return true
       return packet.window_type === opts.type
@@ -325,13 +286,15 @@ module.exports = function containersPlugin (botState, options = {}) {
 
     if (typeof botState.lookAt === 'function' && opts.look !== false) {
       const lookPosition = opts.lookPosition ||
-        (opts.clickPosition ? lookPositionForClick(target, opts.clickPosition) : lookPositionForFace(target, face))
+        (opts.clickPosition ? lookPositionForClick(target, opts.clickPosition) : lookPositionForFace(target, initialFace))
       botState.lookAt(lookPosition, false)
       if (typeof botState.waitForLookComplete === 'function') {
         await botState.waitForLookComplete()
       }
       await sleep(opts.lookSettleMs ?? 100)
     }
+
+    face ??= raycastTargetBlock(botState, target, opts)?.face ?? initialFace
 
     await ensureContainerOpenHeldSlot(opts)
 

@@ -26,7 +26,7 @@ function signEntity (pos, options = {}) {
   })
 }
 
-function createBotState (entity) {
+function createBotState (entity, options = {}) {
   const client = new EventEmitter()
   client.queued = []
   client.queue = (name, params) => {
@@ -36,17 +36,19 @@ function createBotState (entity) {
 
   const block = {
     name: 'standing_sign',
-    entity
+    entity,
+    getProperties: () => options.properties ?? { ground_sign_direction: 0 }
   }
+  if (options.blockName) block.name = options.blockName
 
   const botState = {
     client,
     getBlock: async () => block,
     getBlockEntity: async () => block.entity,
     self: {
-      position: { x: 0.7085602283477783, y: 65.62001037597656, z: 2.0086140632629395 },
-      yaw: 0,
-      pitch: 40.3
+      position: options.position ?? { x: 0.7085602283477783, y: 65.62001037597656, z: 2.0086140632629395 },
+      yaw: options.yaw ?? 0,
+      pitch: options.pitch ?? 40.3
     }
   }
 
@@ -153,6 +155,31 @@ describe('signs builtin', function () {
     assert.deepStrictEqual(transaction.transaction_data.held_item, { network_id: 0 })
     assert.deepStrictEqual(transaction.transaction_data.click_pos, { x: 0.5, y: 0.75, z: 0.25 })
     assert.deepStrictEqual(botState.currentOpenSign.position, pos)
+  })
+
+  it('uses a thin sign shape raycast when opening without an explicit face', async function () {
+    const pos = new Vec3(0, 64, 3)
+    const botState = createBotState(signEntity(pos), {
+      properties: { ground_sign_direction: 0 },
+      position: { x: 0.5, y: 64.5, z: 2 },
+      yaw: 0,
+      pitch: 0
+    })
+    botState.client.entityId = 1n
+
+    const openedPromise = botState.openSignEditor(pos, { look: false })
+    setImmediate(() => {
+      botState.client.emit('open_sign', {
+        position: { x: 0, y: 64, z: 3 },
+        is_front: false
+      })
+    })
+
+    await openedPromise
+    const transaction = botState.client.queued.find(entry => entry.name === 'inventory_transaction').params.transaction
+
+    assert.strictEqual(transaction.transaction_data.face, 2)
+    assert.deepStrictEqual(transaction.transaction_data.click_pos, { x: 0.5, y: 0.5, z: 0 })
   })
 
   it('closes the open sign editor with stop_item_use_on', async function () {

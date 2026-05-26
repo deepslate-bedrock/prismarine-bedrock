@@ -60,22 +60,35 @@ async function waitForBotPosition (botState, target, label, timeoutMs = 8000) {
 
   while (Date.now() - start < timeoutMs) {
     const pos = botState.self?.position
-    if (
-      pos &&
-      Math.abs(pos.x - target.x) < 0.75 &&
-      Math.abs(pos.y - target.y) < 0.75 &&
-      Math.abs(pos.z - target.z) < 0.75
-    ) {
-      return
+    if (pos) {
+      const feet = botState.authoritativeMovementFeetPosition || {
+        x: pos.x,
+        y: pos.y - (botState.self?.eyeHeight || 1.6200103759765625),
+        z: pos.z
+      }
+      const candidates = [pos, feet]
+      if (candidates.some(candidate =>
+        Math.abs(candidate.x - target.x) < 0.75 &&
+        Math.abs(candidate.y - target.y) < 0.75 &&
+        Math.abs(candidate.z - target.z) < 0.75
+      )) {
+        return
+      }
     }
     await sleep(100)
   }
 
   const pos = botState.self?.position
+  const feet = pos && (botState.authoritativeMovementFeetPosition || {
+    x: pos.x,
+    y: pos.y - (botState.self?.eyeHeight || 1.6200103759765625),
+    z: pos.z
+  })
   assert.fail([
     `Timed out waiting for bot position: ${label}`,
     `Expected near: ${target.x} ${target.y} ${target.z}`,
-    `Actual: ${pos ? `${pos.x} ${pos.y} ${pos.z}` : 'unknown'}`
+    `Actual: ${pos ? `${pos.x} ${pos.y} ${pos.z}` : 'unknown'}`,
+    `Actual feet: ${feet ? `${feet.x} ${feet.y} ${feet.z}` : 'unknown'}`
   ].join('\n'))
 }
 
@@ -108,6 +121,19 @@ async function waitForInventoryCount (botState, name, count, timeoutMs = 4000) {
   )
 }
 
+async function waitForBlockName (botState, pos, expectedName, timeoutMs = 8000) {
+  const start = Date.now()
+
+  while (Date.now() - start < timeoutMs) {
+    const block = await botState.getBlock(pos)
+    if (block?.name === expectedName) return block
+    await sleep(150)
+  }
+
+  const block = await botState.getBlock(pos)
+  assert.fail(`Timed out waiting for block ${expectedName} at ${pos}; actual=${block?.name || 'unknown'}`)
+}
+
 async function waitForInventoryCounts (botState, expected, timeoutMs = 4000) {
   await waitForInventoryPredicate(
     botState,
@@ -131,8 +157,8 @@ async function setupCraftingWorld (botState) {
   sendCommand(botState, 'fill -2 64 -2 2 68 2 air')
   sendCommand(botState, 'fill -2 63 -2 2 63 2 grass_block')
   sendCommand(botState, `setblock ${tablePos.x} ${tablePos.y} ${tablePos.z} minecraft:crafting_table`)
-  await markLocalArea(botState, tablePos)
   await sleep(SETUP_DELAY_MS)
+  await waitForCraftingArea(botState, tablePos)
 
   sendCommand(
     botState,
@@ -141,20 +167,13 @@ async function setupCraftingWorld (botState) {
   await waitForBotPosition(botState, standPos, 'next to crafting table')
 }
 
-async function markLocalBlock (botState, pos, block) {
-  const name = block.replace(/^minecraft:/, '').split('[')[0]
-  const stateId = botState.registry.blocksByName[name]?.defaultState
-  if (stateId == null || typeof botState.setBlockStateIdAt !== 'function') return
-  await botState.setBlockStateIdAt(pos, stateId)
-}
-
-async function markLocalArea (botState, tablePos) {
+async function waitForCraftingArea (botState, tablePos) {
   for (let dx = -2; dx <= 2; dx++) {
     for (let dz = -2; dz <= 2; dz++) {
-      await markLocalBlock(botState, new Vec3(dx, tablePos.y - 1, dz), 'minecraft:grass_block')
+      await waitForBlockName(botState, new Vec3(dx, tablePos.y - 1, dz), 'grass_block')
     }
   }
-  await markLocalBlock(botState, tablePos, 'minecraft:crafting_table')
+  await waitForBlockName(botState, tablePos, 'crafting_table')
 }
 
 async function setupInventoryCraftingPlayer (botState) {

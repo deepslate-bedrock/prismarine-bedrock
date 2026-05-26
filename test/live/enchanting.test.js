@@ -10,7 +10,6 @@ const {
   findSlotByName,
   itemSignature,
   itemSummary,
-  markLocalBlock,
   safeJsonReplacer,
   sleep,
   waitForBlockName,
@@ -75,11 +74,6 @@ async function setupEnchantingWorld(botState) {
   sendCommand(botState, `fill ${x + 2} ${y} ${z - 1} ${x + 2} ${y} ${z + 1} minecraft:bookshelf`);
   await sleep(SETUP_DELAY_MS);
 
-  await markLocalBlock(botState, ENCHANT_POS, "minecraft:enchanting_table");
-  for (const pos of bookshelfPositions()) {
-    await markLocalBlock(botState, pos, "minecraft:bookshelf");
-  }
-
   teleportPlayer(botState, USERNAME, x + 0.5, y, z + 3.5);
   await sleep(SETUP_DELAY_MS);
 
@@ -88,6 +82,9 @@ async function setupEnchantingWorld(botState) {
   }
 
   await waitForBlockName(botState, ENCHANT_POS, "enchanting_table");
+  for (const pos of bookshelfPositions()) {
+    await waitForBlockName(botState, pos, "bookshelf");
+  }
 
   givePlayer(botState, USERNAME, "diamond_sword", 1);
   givePlayer(botState, USERNAME, "lapis_lazuli", 3);

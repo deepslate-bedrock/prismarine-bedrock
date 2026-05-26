@@ -12,7 +12,6 @@ const {
   isBotConnected,
   itemSignature,
   itemSummary,
-  markLocalBlock,
   safeJsonReplacer,
   sleep,
   waitForBlockName,
@@ -63,7 +62,6 @@ async function setupContainerArea(botState, blocks, items = []) {
 
   for (const { pos, block } of blocks) {
     await setBlockIfNeeded(botState, pos, block);
-    await markLocalBlock(botState, pos, block);
   }
 
   for (const { pos, expectedName } of blocks) {

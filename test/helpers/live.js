@@ -114,13 +114,6 @@ async function waitForBlockName(botState, pos, expectedName, timeoutMs = 8000) {
   );
 }
 
-async function markLocalBlock(botState, pos, block) {
-  const name = block.replace(/^minecraft:/, "").split("[")[0];
-  const stateId = botState.registry.blocksByName[name]?.defaultState;
-  if (stateId == null || typeof botState.setBlockStateIdAt !== "function") return;
-  await botState.setBlockStateIdAt(pos, stateId);
-}
-
 function assertHasApi(botState, name) {
   assert.strictEqual(typeof botState[name], "function", `Expected botState.${name} to exist`);
 }
@@ -188,7 +181,6 @@ module.exports = {
   isBotConnected,
   itemSignature,
   itemSummary,
-  markLocalBlock,
   observeQueuedPackets,
   safeJsonReplacer,
   sleep,

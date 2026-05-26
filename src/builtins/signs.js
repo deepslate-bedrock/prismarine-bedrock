@@ -4,6 +4,8 @@ const {
   itemToRaw,
   nbtValue,
   normalizeBlockPos,
+  raycastBlock,
+  signShapeOverride,
   sleep,
   toVec3f
 } = require('../utils')
@@ -219,6 +221,35 @@ function openHeldItemRaw (botState) {
   return { heldSlot, raw }
 }
 
+async function blockAt (botState, pos) {
+  if (typeof botState.getBlock === 'function') {
+    try {
+      return await botState.getBlock(pos)
+    } catch {}
+  }
+
+  try {
+    const world = botState.world?.sync || botState.world
+    return world?.getBlock?.(pos) ?? null
+  } catch {
+    return null
+  }
+}
+
+function raycastSignBlock (botState, pos, block, options = {}) {
+  const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition ?? pos
+  return raycastBlock(
+    playerPos,
+    pos,
+    botState.self?.yaw ?? 0,
+    botState.self?.pitch ?? 0,
+    {
+      block,
+      shapeOverride: options.shapeOverride ?? signShapeOverride
+    }
+  )
+}
+
 module.exports = (botState) => {
   const client = botState.client
   let currentOpenSign = null
@@ -261,9 +292,9 @@ module.exports = (botState) => {
       throw new Error(`Sign editor already open at ${currentOpenSign.position}`)
     }
 
-    const face = options.face ?? blockFace(botState, pos)
+    const block = options.block ?? await blockAt(botState, pos)
+    const initialFace = options.face ?? blockFace(botState, pos)
     const held = openHeldItemRaw(botState)
-    const resultPosition = resultPositionForFace(pos, face)
     const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition ?? pos
     const runtimeEntityId = client.entityId ?? botState.self?.runtimeId ?? 0n
 
@@ -272,6 +303,10 @@ module.exports = (botState) => {
       if (typeof botState.waitForLookComplete === 'function') await botState.waitForLookComplete()
     }
 
+    const rayHit = raycastSignBlock(botState, pos, block, options)
+    const face = options.face ?? rayHit?.face ?? initialFace
+    const resultPosition = resultPositionForFace(pos, face)
+    const clickPosition = options.clickPosition ?? (options.face == null && rayHit?.face === face ? rayHit.clickPosition : null) ?? signClickPositionForFace(face)
     const openSign = waitForOpenSign(pos, options.openTimeoutMs ?? 5000)
 
     client.queue('player_action', {
@@ -303,7 +338,7 @@ module.exports = (botState) => {
           hotbar_slot: held.heldSlot,
           held_item: held.raw,
           player_pos: toVec3f(playerPos),
-          click_pos: options.clickPosition ?? signClickPositionForFace(face),
+          click_pos: clickPosition,
           block_runtime_id: getBlockRuntimeId(botState, pos),
           client_prediction: 'success',
           client_cooldown_state: 0

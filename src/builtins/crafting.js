@@ -13,12 +13,6 @@ const CONTAINER = {
 }
 
 const INVENTORY_CRAFTING_GRID_SLOTS = [30, 31, 28, 29]
-const CRAFTING_TABLE_OPEN_CLICK_POS = {
-  x: 0.8455779552459717,
-  y: 1,
-  z: 0.2944147288799286
-}
-
 const ACTION = {
   take: 'take',
   place: 'place',
@@ -162,11 +156,12 @@ function reserveIngredients (botState, ingredientPositions, times) {
 }
 
 function outputSlot (botState, result, used) {
-  const stackSize = botState.registry.items[result.network_id]?.stackSize || 64
-
   for (let slot = 0; slot < botState.inventory.slots.length; slot++) {
     const item = botState.inventory.slots[slot]
     const countAfterCraft = (item?.count || 0) - (used.get(slot) || 0)
+    const stackSize = item?.type === result.network_id
+      ? inventoryItemStackSize(botState, item)
+      : 0
     if (item?.type === result.network_id && countAfterCraft + result.count <= stackSize) return slot
   }
 
@@ -176,6 +171,26 @@ function outputSlot (botState, result, used) {
   }
 
   return null
+}
+
+function inventoryItemStackSize (botState, item) {
+  if (Number.isInteger(item?.maxDurability) && item.maxDurability > 0) return 1
+  if (Number.isInteger(item?.max_durability) && item.max_durability > 0) return 1
+
+  const craftingByName = item?.name ? botState.craftingRecipeRegistry?.itemsByName?.[String(item.name).replace(/^minecraft:/, '')] : null
+  if (Number.isInteger(craftingByName?.maxDurability) && craftingByName.maxDurability > 0) return 1
+  if (Number.isInteger(craftingByName?.max_durability) && craftingByName.max_durability > 0) return 1
+  if (Number.isInteger(craftingByName?.stackSize)) return craftingByName.stackSize
+
+  const byName = item?.name ? botState.registry.itemsByName?.[String(item.name).replace(/^minecraft:/, '')] : null
+  if (Number.isInteger(byName?.maxDurability) && byName.maxDurability > 0) return 1
+  if (Number.isInteger(byName?.max_durability) && byName.max_durability > 0) return 1
+  if (Number.isInteger(byName?.stackSize)) return byName.stackSize
+
+  const byType = botState.registry.items[item?.type]
+  if (Number.isInteger(byType?.maxDurability) && byType.maxDurability > 0) return 1
+  if (Number.isInteger(byType?.max_durability) && byType.max_durability > 0) return 1
+  return Number.isInteger(byType?.stackSize) ? byType.stackSize : 64
 }
 
 function nextCraftStackId (botState) {
@@ -472,13 +487,15 @@ async function openCraftingTable (botState, block) {
     await sleep(50)
   }
 
-  return botState.openBlockContainer(block.position, {
+  const openOptions = {
     type: 'workbench',
     blockName: 'crafting_table',
-    face: block.face ?? 1,
-    clickPosition: block.clickPosition ?? CRAFTING_TABLE_OPEN_CLICK_POS,
     preserveHeldSlot: true
-  })
+  }
+  if (block.face != null) openOptions.face = block.face
+  if (block.clickPosition != null) openOptions.clickPosition = block.clickPosition
+
+  return botState.openBlockContainer(block.position, openOptions)
 }
 
 function openPlayerInventoryForCrafting (botState, timeoutMs = 5000) {
