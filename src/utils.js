@@ -1,6 +1,7 @@
 const Vec3 = require('vec3').Vec3
 
 let seq = 0
+let loggingEnabled = true
 
 function jsonSafeReplacer (_, value) {
   if (typeof value === 'bigint') return value.toString()
@@ -16,9 +17,19 @@ function safeJson (value) {
 }
 
 function logAction (dir, packetName, detail = '') {
+  if (!loggingEnabled) return
+
   const ts = new Date().toISOString().slice(11, 23)
   const renderedDetail = detail ? ' ' + safeJson(detail) : ''
   console.log(`[${ts}] [#${++seq}] ${dir} ${packetName}${renderedDetail}`)
+}
+
+function setLoggingEnabled (enabled) {
+  loggingEnabled = enabled !== false
+}
+
+function isLoggingEnabled () {
+  return loggingEnabled
 }
 
 function sleep (ms) {
@@ -317,6 +328,8 @@ function deltaDeg (y1, y2) {
 
 module.exports = {
   logAction,
+  setLoggingEnabled,
+  isLoggingEnabled,
   sleep,
   sameRuntimeId,
   toPlainId,

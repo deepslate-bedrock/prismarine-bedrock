@@ -3,6 +3,7 @@
 const assert = require('assert')
 const { EventEmitter } = require('events')
 const BotState = require('../../src/state')
+const { isLoggingEnabled, logAction, setLoggingEnabled } = require('../../src/utils')
 const pluginLoader = require('../../src/plugin-loader')
 const setupPlugin = require('../../src/builtins/setup')
 const worldPlugin = require('../../src/builtins/world')
@@ -33,6 +34,30 @@ describe('runtime options', function () {
     assert.strictEqual(bot.options.worldDecodeEnabled, true)
     assert.strictEqual(bot.options.physicsEnabled, true)
     assert.strictEqual(bot.options.physicsEngine, 'native')
+    assert.strictEqual(bot.options.loggingEnabled, true)
+  })
+
+  it('supports disabling Prismarine Bedrock action logging', function () {
+    const originalLog = console.log
+    const lines = []
+
+    try {
+      console.log = line => lines.push(line)
+
+      const bot = new BotState({
+        username: 'RuntimeOptionsBot',
+        loggingEnabled: false
+      })
+
+      assert.strictEqual(bot.options.loggingEnabled, false)
+      assert.strictEqual(isLoggingEnabled(), false)
+
+      logAction('[test]', 'hidden')
+      assert.deepStrictEqual(lines, [])
+    } finally {
+      console.log = originalLog
+      setLoggingEnabled(true)
+    }
   })
 
   it('supports selecting the nxg physics wrapper', function () {

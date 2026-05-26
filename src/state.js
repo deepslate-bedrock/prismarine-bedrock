@@ -1,6 +1,6 @@
 const bedrock = require('bedrock-protocol');
 const Vec3 = require('vec3').Vec3;
-const { logAction } = require('./utils');
+const { logAction, setLoggingEnabled } = require('./utils');
 const { EventEmitter } = require('stream');
 const { bedrockRegistryName, normalizeBedrockVersion } = require('./version');
 const pluginLoader = require('./plugin-loader');
@@ -19,6 +19,10 @@ function normalizeBooleanOption(value, name) {
 }
 
 function normalizeRuntimeOptions(options = {}) {
+  const loggingEnabled =
+    normalizeBooleanOption(options.loggingEnabled, 'loggingEnabled') ??
+    true;
+
   const worldDecodeEnabled =
     normalizeBooleanOption(options.worldDecodeEnabled, 'worldDecodeEnabled') ??
     true;
@@ -39,6 +43,7 @@ function normalizeRuntimeOptions(options = {}) {
 
   return {
     ...options,
+    loggingEnabled,
     worldDecodeEnabled,
     physicsEnabled,
     physicsEngine: physicsEngine === 'nxg-org' ? 'nxg' : physicsEngine
@@ -52,6 +57,7 @@ class BotState extends EventEmitter {
       ...options,
       version: normalizeBedrockVersion(options.version)
     });
+    setLoggingEnabled(this.options.loggingEnabled);
     const registry = require('prismarine-registry')(bedrockRegistryName(this.options.version));
 
     this.registry = registry;
