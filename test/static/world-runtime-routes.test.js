@@ -147,6 +147,20 @@ function stateIdFor (botState, blockName) {
   return botState.registry.blocksByName[blockName].defaultState
 }
 
+function blockEntityNbt (id, pos, fields = {}) {
+  return {
+    type: 'compound',
+    name: '',
+    value: {
+      id: { type: 'string', value: id },
+      x: { type: 'int', value: pos.x },
+      y: { type: 'int', value: pos.y },
+      z: { type: 'int', value: pos.z },
+      ...fields
+    }
+  }
+}
+
 async function seedColumn (botState, cx = 0, cz = 0) {
   const chunk = new botState.chunkColumn({ x: cx, z: cz })
   await botState.world.setColumn(cx, cz, chunk)
@@ -296,17 +310,20 @@ describe('world runtime mapping routes', function () {
 
       it('applies update_block through the runtime registry map', async function () {
         const botState = (currentBotState = createWorldBotState(context))
+        const pos = new Vec3(1, 64, 1)
+        const runtimeId = runtimeIdFor(botState, 'air')
         await seedColumn(botState)
 
         botState.client.emit('update_block', {
-          position: { x: 1, y: 64, z: 1 },
-          block_runtime_id: runtimeIdFor(botState, 'air'),
+          position: { x: pos.x, y: pos.y, z: pos.z },
+          block_runtime_id: runtimeId,
           layer: 0
         })
 
         await waitImmediate()
 
-        await assertBlockAt(botState, new Vec3(1, 64, 1), 'air')
+        await assertBlockAt(botState, pos, 'air')
+        assert.strictEqual(botState.blockRuntimeIdsByPosition.get('1,64,1'), runtimeId)
       })
 
       it('applies update_block_synced through the runtime registry map', async function () {
@@ -340,6 +357,43 @@ describe('world runtime mapping routes', function () {
         await waitImmediate()
 
         await assertBlockAt(botState, new Vec3(3, 64, 3), 'emerald_block')
+      })
+
+      it('attaches block_entity_data NBT to blocks returned by Prismarine world', async function () {
+        const botState = (currentBotState = createWorldBotState(context))
+        const pos = new Vec3(4, 64, 4)
+        const signText = 'Alpha\nBeta'
+
+        await seedColumn(botState)
+        await botState.setBlockStateIdAt(pos, stateIdFor(botState, 'standing_sign'))
+
+        botState.client.emit('block_entity_data', {
+          position: { x: pos.x, y: pos.y, z: pos.z },
+          nbt: blockEntityNbt('Sign', pos, {
+            FrontText: {
+              type: 'compound',
+              value: {
+                Text: { type: 'string', value: signText }
+              }
+            },
+            BackText: {
+              type: 'compound',
+              value: {
+                Text: { type: 'string', value: '' }
+              }
+            }
+          })
+        })
+
+        await waitImmediate()
+
+        const block = await botState.getBlock(pos)
+        const entity = await botState.getBlockEntity(pos)
+
+        assert.strictEqual(block.name, 'standing_sign')
+        assert.strictEqual(block.entity, entity)
+        assert.strictEqual(block.entity.value.id.value, 'Sign')
+        assert.strictEqual(block.entity.value.FrontText.value.Text.value, signText)
       })
     })
   }

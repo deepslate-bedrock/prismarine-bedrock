@@ -1,6 +1,6 @@
 const Vec3 = require('vec3').Vec3;
 const nbt = require('prismarine-nbt');
-const { getStateId, normalizeBlockPos, sameRuntimeId, withLayer } = require('../utils');
+const { blockRuntimeIdPositionKey, getStateId, normalizeBlockPos, sameRuntimeId, withLayer } = require('../utils');
 
 // ── Helper types for blob store ──
 const BlobType = { ChunkSection: 0, Biomes: 1 };
@@ -18,9 +18,11 @@ module.exports = (botState, options = {}) => {
   botState.protocolState ??= {};
   botState.game ??= {};
   botState.playerState ??= {};
+  botState.blockRuntimeIdsByPosition ??= new Map();
 
   botState.resetWorld = () => {
     botState.world = new botState.worldClass(null);
+    botState.blockRuntimeIdsByPosition?.clear();
     return botState.world;
   };
 
@@ -168,6 +170,11 @@ module.exports = (botState, options = {}) => {
     return botState.world.getBlock(pos);
   };
 
+  botState.getBlockEntity = async (...args) => {
+    const block = await botState.getBlock(...args);
+    return block?.entity ?? null;
+  };
+
   botState.getBlockStateIdAt = (...args) => {
     const pos = normalizeBlockPos(...args);
     return botState.world.getBlockStateId(pos);
@@ -177,6 +184,7 @@ module.exports = (botState, options = {}) => {
     const stateId = args[args.length - 1];
     const pos = normalizeBlockPos(...args.slice(0, -1));
 
+    botState.blockRuntimeIdsByPosition.delete(blockRuntimeIdPositionKey(pos));
     await botState.world.setBlockStateId(pos, stateId);
     return true;
   };
@@ -776,7 +784,9 @@ module.exports = (botState, options = {}) => {
       return;
     }
 
+    botState.blockRuntimeIdsByPosition.set(blockRuntimeIdPositionKey(pos), blockRuntimeId);
     await botState.setBlockStateIdAt(pos.x, pos.y, pos.z, stateId);
+    botState.blockRuntimeIdsByPosition.set(blockRuntimeIdPositionKey(pos), blockRuntimeId);
   }
 
   client.on('update_block', async (pkt) => {

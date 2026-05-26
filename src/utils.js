@@ -148,7 +148,14 @@ function blockRuntimeIdByName (botState, name) {
   return undefined
 }
 
+function blockRuntimeIdPositionKey (pos) {
+  return `${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}`
+}
+
 function getBlockRuntimeId (botState, pos, fallback = {}) {
+  const direct = botState.blockRuntimeIdsByPosition?.get(blockRuntimeIdPositionKey(pos))
+  if (Number.isFinite(direct)) return direct
+
   try {
     const world = botState.world?.sync || botState.world
     const block = world?.getBlock?.(pos)
@@ -367,6 +374,7 @@ module.exports = {
   withLayer,
   getStateId,
   blockRuntimeIdByName,
+  blockRuntimeIdPositionKey,
   getBlockRuntimeId,
   clickPositionForFace,
   rawStackId,
