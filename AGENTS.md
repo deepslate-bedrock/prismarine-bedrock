@@ -9,6 +9,13 @@ This repo is the clean base library for `prismarine-bedrock`. Keep changes focus
 3. For test changes, read `test/rules.md`.
 4. Keep runtime/debug artifacts in `logs/` or `scripts/tmp/`; both are gitignored.
 
+## Context Budget
+
+- Pull context sparsely: use `rg`, `rg --files`, `git diff --stat`, and focused file ranges before opening full files.
+- Read the nearest source, tests, and rule sections needed for the current change. Avoid loading broad docs, generated data, or old task history unless the next decision depends on it.
+- Keep handoff notes concise: changed files, focused commands run, current failure or uncertainty, and the next exact file/command to inspect.
+- When another agent is involved, assign a narrow owned path or question and ask for concise findings plus changed paths.
+
 ## Repository Boundaries
 
 - Base library work belongs here: `src/`, `examples/`, `test/static/`, `test/fake-world/`, `test/live/`, and library reference docs.

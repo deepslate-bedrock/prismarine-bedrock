@@ -8,7 +8,9 @@
   },
   "scripts": {
     "test": "pnpm run test:static",
-    "test:static": "mocha \"test/static/**/*.test.js\"",
+    "test:static": "node scripts/run-static-tests.js",
+    "test:static:core": "mocha --ignore \"test/static/physics/**/*.test.js\" \"test/static/**/*.test.js\"",
+    "test:static:physics": "node scripts/run-static-physics-fixtures.js && mocha --parallel \"test/static/physics/*.test.js\"",
     "test:fake-world": "mocha \"test/fake-world/**/*.test.js\"",
     "test:live": "mocha --config .mocharc.live.json \"test/live/**/*.test.js\"",
     "test:all": "pnpm run test:static && pnpm run test:fake-world && pnpm run test:live",

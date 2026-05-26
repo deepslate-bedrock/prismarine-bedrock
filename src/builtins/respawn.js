@@ -6,6 +6,8 @@ const { logAction, sameRuntimeId } = require('../utils')
  */
 module.exports = (botState) => {
   const client = botState.client
+  const respawnReadyDelayMs = timeoutOption(botState.options?.respawnReadyDelayMs, 300)
+  const respawnFallbackActionDelayMs = timeoutOption(botState.options?.respawnFallbackActionDelayMs, 5000)
 
   botState.lifecycle ??= {}
   botState.playerState ??= {}
@@ -41,7 +43,7 @@ module.exports = (botState) => {
       cause: packet.cause,
       message: packet.messages?.[0]
     })
-    scheduleRespawn(300)
+    scheduleRespawn(respawnReadyDelayMs)
   })
 
   client.on('respawn', (packet) => {
@@ -110,7 +112,7 @@ module.exports = (botState) => {
       botState.lifecycle.respawnTimeout = setTimeout(() => {
         if (!botState.lifecycle.isDead) return
         sendDeathRespawnAction()
-      }, 5000)
+      }, respawnFallbackActionDelayMs)
     }, delay)
   }
 
@@ -150,5 +152,11 @@ module.exports = (botState) => {
     clearRespawnState()
     botState.lifecycle.isDead = false
     botState.playerState.health = health
+  }
+
+  function timeoutOption (value, fallback) {
+    if (value == null) return fallback
+    const n = Number(value)
+    return Number.isFinite(n) && n >= 0 ? n : fallback
   }
 }

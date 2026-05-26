@@ -8,7 +8,7 @@ function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function createBot () {
+function createBot (options = {}) {
   const client = new EventEmitter()
   client.entityId = 1n
   client.queued = []
@@ -19,7 +19,8 @@ function createBot () {
   const botState = {
     client,
     lifecycle: {},
-    playerState: {}
+    playerState: {},
+    options
   }
 
   respawnPlugin(botState)
@@ -51,7 +52,7 @@ describe('respawn builtin', function () {
   })
 
   it('matches Bedrock death-screen respawn packet order', async function () {
-    const { botState, client } = createBot()
+    const { botState, client } = createBot({ respawnReadyDelayMs: 5 })
 
     client.emit('death_info', {
       cause: 'death.attack.generic',
@@ -63,7 +64,7 @@ describe('respawn builtin', function () {
       runtime_entity_id: 0n
     })
 
-    await sleep(350)
+    await sleep(20)
 
     client.emit('respawn', {
       state: 0,
@@ -101,31 +102,34 @@ describe('respawn builtin', function () {
   })
 
   it('uses the fallback action when the server never sends ready state', async function () {
-    const { client } = createBot()
+    const { client } = createBot({
+      respawnReadyDelayMs: 5,
+      respawnFallbackActionDelayMs: 40
+    })
 
     client.emit('death_info', {
       cause: 'death.attack.generic',
       messages: ['OpBot']
     })
-    await sleep(350)
+    await sleep(20)
 
     assert.deepStrictEqual(client.queued.map(packet => packet.name), ['respawn'])
 
-    await sleep(5100)
+    await sleep(60)
 
     assert.deepStrictEqual(client.queued.map(packet => packet.name), ['respawn', 'player_action'])
     assert.strictEqual(client.queued[1].packet.action, 'respawn')
   })
 
   it('treats Geyser respawn entity_event as completion', async function () {
-    const { botState, client } = createBot()
+    const { botState, client } = createBot({ respawnReadyDelayMs: 5 })
 
     client.emit('death_info', {
       cause: 'death.attack.generic',
       messages: ['OpBot']
     })
 
-    await sleep(350)
+    await sleep(20)
 
     client.emit('entity_event', {
       runtime_entity_id: 1n,
