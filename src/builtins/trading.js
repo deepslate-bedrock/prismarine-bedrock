@@ -44,6 +44,12 @@ module.exports = function tradingPlugin (botState, options = {}) {
   let tradeTimeoutMs = options.tradeTimeoutMs ?? 10000
   let lastTradeWindow = null
 
+  function inventoryActions () {
+    const actions = botState.inventory?.actions ?? botState.inventoryActionHelpers
+    if (!actions) throw new Error('inventory-actions builtin is required before using trading helpers')
+    return actions
+  }
+
   function packetEntityIds (packet) {
     return [
       packet.trader_runtime_entity_id,
@@ -245,8 +251,8 @@ module.exports = function tradingPlugin (botState, options = {}) {
 
   function currentTradeContainer () {
     const windowId = botState.currentTradeWindow?.window_id ?? lastTradeWindow?.window_id
-    if (windowId == null || !botState.getContainer) return null
-    return botState.getContainer(windowId)
+    if (windowId == null) return null
+    return botState.containers?.get?.(windowId) ?? botState.getContainer?.(windowId) ?? null
   }
 
   function summarizeRecipe (recipe, index = null) {
@@ -536,7 +542,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     ]
 
     return {
-      request: botState.inventoryActionHelpers.makeRequest(actions),
+      request: inventoryActions().makeRequest(actions),
       destinationSlot,
       actions
     }
@@ -553,7 +559,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     ]
 
     return {
-      request: botState.inventoryActionHelpers.makeRequest(actions),
+      request: inventoryActions().makeRequest(actions),
       destinationSlot,
       actions
     }
@@ -563,7 +569,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     const actions = ingredientActions(recipe, count, opts)
 
     return {
-      request: botState.inventoryActionHelpers.makeRequest(actions),
+      request: inventoryActions().makeRequest(actions),
       actions
     }
   }
@@ -574,7 +580,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     ]
 
     return {
-      request: botState.inventoryActionHelpers.makeRequest(actions),
+      request: inventoryActions().makeRequest(actions),
       destinationSlot,
       actions
     }
@@ -586,7 +592,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     ]
 
     return {
-      request: botState.inventoryActionHelpers.makeRequest(actions),
+      request: inventoryActions().makeRequest(actions),
       actions
     }
   }
@@ -627,13 +633,9 @@ module.exports = function tradingPlugin (botState, options = {}) {
   }
 
   async function sendRawTradeRequest (request, timeoutMs) {
-    const responsePromise = botState.waitForRawItemStackResponse(request.request_id, timeoutMs)
-
-    if (botState.sendStandaloneItemStackRequest) {
-      botState.sendStandaloneItemStackRequest(request)
-    } else {
-      botState.sendItemStackRequest(request)
-    }
+    const actions = inventoryActions()
+    const responsePromise = actions.waitRaw(request.request_id, timeoutMs)
+    actions.sendStandalone ? actions.sendStandalone(request) : actions.send(request)
 
     return responsePromise
   }
@@ -681,7 +683,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
 
     if (actions.length === 0) return null
 
-    const request = botState.inventoryActionHelpers.makeRequest(actions)
+    const request = inventoryActions().makeRequest(actions)
 
     logAction('[trading]', 'execute_trade restore inputs request full', {
       request_id: request.request_id,
@@ -744,12 +746,13 @@ module.exports = function tradingPlugin (botState, options = {}) {
       actions: request.actions
     })
 
-    const responsePromise = botState.waitForRawItemStackResponse(
+    const actions = inventoryActions()
+    const responsePromise = actions.waitRaw(
       request.request_id,
       opts.timeoutMs ?? opts.responseTimeoutMs ?? tradeTimeoutMs
     )
 
-    botState.sendItemStackRequest(request)
+    actions.send(request)
 
     logAction('[trading]', 'execute_trade request', {
       request_id: request.request_id,
@@ -914,6 +917,28 @@ module.exports = function tradingPlugin (botState, options = {}) {
   botState.findTrade = findTrade
   botState.executeTrade = executeTrade
 
+  botState.trading = {
+    open: openTrade,
+    waitForWindow: waitForTradeWindow,
+    closeWindow: closeTradeWindow,
+    currentRecipes: currentTradeRecipes,
+    find: findTrade,
+    execute: executeTrade,
+    setTimeout: ms => {
+      tradeTimeoutMs = ms
+    }
+  }
+  Object.defineProperties(botState.trading, {
+    currentWindow: {
+      enumerable: true,
+      get: () => botState.currentTradeWindow ?? null
+    },
+    currentEntity: {
+      enumerable: true,
+      get: () => botState.currentTradingEntity ?? null
+    }
+  })
+
   botState.tradeHelpers = {
     nbtValue,
     normalizeItemId,
@@ -939,6 +964,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     tradeIngredientSlotInfo,
     tradeResultSlotInfo
   }
+  botState.trading.helpers = botState.tradeHelpers
 
   botState.setTradeTimeout = ms => {
     tradeTimeoutMs = ms

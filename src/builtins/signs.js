@@ -435,12 +435,10 @@ module.exports = (botState) => {
   botState.signs = {
     isSignBlockName,
     signSideKey,
-    openSignEditor,
-    closeSignEditor
+    openEditor: openSignEditor,
+    closeEditor: closeSignEditor,
+    read: readSign,
+    edit: editSign,
+    write: editSign
   }
-  botState.openSignEditor = openSignEditor
-  botState.closeSignEditor = closeSignEditor
-  botState.readSign = readSign
-  botState.editSign = editSign
-  botState.writeSign = editSign
 }

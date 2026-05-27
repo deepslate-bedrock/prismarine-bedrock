@@ -36,12 +36,12 @@ describe('scoreboard builtin', function () {
       ]
     })
 
-    const objective = state.getScoreboardObjective('sidebar')
+    const objective = state.scoreboards.getObjective('sidebar')
     assert.strictEqual(objective.name, 'kills')
     assert.strictEqual(objective.displayName, 'Kills')
     assert.strictEqual(objective.displaySlots.has('sidebar'), true)
 
-    const scores = state.getDisplayedScores('sidebar')
+    const scores = state.scoreboards.getDisplayedScores('sidebar')
     assert.deepStrictEqual(scores.map(score => [score.displayName, score.score]), [
       ['Steve', 7],
       ['Alex', 3]
@@ -53,11 +53,8 @@ describe('scoreboard builtin', function () {
     assert.strictEqual(state.scoreboards.getScore('kills', 11n).customName, 'Alex')
     assert.strictEqual(state.scoreboards.getScore('kills', score => score.score === 7).customName, 'Steve')
     assert.strictEqual(state.scoreboards.getScore('kills', 'missing'), null)
-    assert.deepStrictEqual(state.getScoreboardScores('kills').map(score => score.customName), ['Steve', 'Alex'])
-    assert.strictEqual(state.getScoreboardScore('sidebar', 'Steve').score, 7)
-    assert.strictEqual(state.getScoreboardScore('kills', 11n).customName, 'Alex')
-    assert.strictEqual(state.getScoreboardScore('kills', score => score.score === 7).customName, 'Steve')
-    assert.strictEqual(state.getScoreboardScore('kills', 'missing'), null)
+    assert.strictEqual(state.getScoreboardObjective, undefined)
+    assert.strictEqual(state.getDisplayedScores, undefined)
     assert.strictEqual(seen.length, 2)
   })
 
@@ -84,13 +81,13 @@ describe('scoreboard builtin', function () {
       entries: [{ scoreboard_id: 1n, objective_name: 'coins' }]
     })
 
-    assert.strictEqual(state.getScoreboardEntry(1n), null)
-    assert.deepStrictEqual(state.getDisplayedScores('sidebar').map(score => score.customName), ['two'])
+    assert.strictEqual(state.scoreboards.getEntry(1n), null)
+    assert.deepStrictEqual(state.scoreboards.getDisplayedScores('sidebar').map(score => score.customName), ['two'])
 
     state.client.emit('remove_objective', { objective_name: 'coins' })
 
-    assert.strictEqual(state.getScoreboardObjective('coins'), null)
-    assert.strictEqual(state.getScoreboardObjective('sidebar'), null)
+    assert.strictEqual(state.scoreboards.getObjective('coins'), null)
+    assert.strictEqual(state.scoreboards.getObjective('sidebar'), null)
     assert.strictEqual(state.scoreboards.scores.size, 0)
   })
 
@@ -111,7 +108,7 @@ describe('scoreboard builtin', function () {
       entries: [{ scoreboard_id: 15n, entity_unique_id: 99n }]
     })
 
-    const entry = state.getScoreboardEntry(15n)
+    const entry = state.scoreboards.getEntry(15n)
     assert.strictEqual(entry.displayName, 'KnownPlayer')
     assert.strictEqual(entry.identityEntityUniqueId, 99n)
   })

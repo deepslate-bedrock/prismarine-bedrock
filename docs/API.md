@@ -103,9 +103,51 @@ custom bootstrapping need manual control.
 | --- | --- | --- |
 | `createBot` | `stable` | Started bot factory. |
 | `BotState` | `stable` | Runtime class. |
-| `pluginLoader` | `partial` | Local plugin helpers: `loadPlugin`, `loadPlugins`, `hasPlugin`, `injectAll`, `injectPlugins`, `loadBuiltins`, `isInjected`, `shouldLoadBuiltin`, `ensureState`. |
+| `pluginLoader` | `partial` | Local plugin helpers: `loadPlugin`, `loadPlugins`, `hasPlugin`, `isPluginLoaded`, `installPlugin`, `injectAll`, `injectPlugins`, `loadBuiltins`, `isInjected`, `shouldLoadBuiltin`, `ensureState`. |
 | `utils` | `internal` | Shared packet/runtime helpers. Useful for agents and advanced plugins. |
 | Version helpers | `stable` | `normalizeBedrockVersion`, `bedrockVersionFromEnv`, `bedrockRegistryName`, `minecraftDataBedrockDir`. |
+
+### Native Plugin Loading
+
+Native Prismarine Bedrock plugins are install functions, following the same
+general shape as Mineflayer plugins. Plugin-specific settings should not be
+threaded through `createBot(options)`. Instead, load the plugin and adjust its
+public state/API directly before starting the bot.
+
+```js
+const { BotState, pluginLoader } = require('prismarine-bedrock')
+const examplePlugin = require('bedrock-example-plugin')
+
+const bot = new BotState({
+  host: 'localhost',
+  port: 19132,
+  username: 'BedrockBot',
+  offline: true
+})
+
+pluginLoader.installPlugin(bot, examplePlugin)
+bot.examplePlugin.settings.chatCommand = '!example'
+bot.start()
+```
+
+The native plugin shape is:
+
+```js
+function examplePlugin (bot, options) {
+  bot.examplePlugin = {
+    settings: {
+      chatCommand: '!example'
+    }
+  }
+}
+```
+
+The loader tracks installed plugin functions per bot and prevents reinstalling
+the same function on the same bot. `pluginsLoaded` fires once after queued
+external plugins have been injected during startup. The second `options`
+argument is still the bot's normalized runtime options for compatibility and
+shared runtime decisions, but plugin-specific settings should usually live on
+the plugin API and be changed after load.
 
 ## State Roots And Properties
 
@@ -305,13 +347,13 @@ for inventory mirror shape, stack request helpers, common actions, and events.
 | --- | --- | --- | --- | --- |
 | `bot.getWindow` | `getWindow(windowId = 0)` | window or `null` | Reads `bot.windows`. |
 | `bot.getUiSlot` | `getUiSlot(slot)` | projected UI slot or `null` | Reads Bedrock UI slot projection. |
-| `bot.getItem` | `getItem(slot, windowId = 0)` | item or `null` | Reads a window slot. |
-| `bot.findItem` | `findItem(itemType, metadata, notFull, nbt, windowId = 0)` | item or `null` | Searches inventory range through Prismarine window helpers. |
-| `bot.count` | `count(itemType, metadata, windowId = 0)` | number | Counts matching items in a window. |
-| `bot.applyItemStackResponseToInventory` | `applyItemStackResponseToInventory(response)` | `undefined` | Applies accepted server stack ids/counts into local inventory mirror. |
+| `bot.inventory.getItem` | `getItem(slot, windowId = 0)` | item or `null` | Reads a window slot. |
+| `bot.inventory.findItem` | `findItem(itemType, metadata, notFull, nbt, windowId = 0)` | item or `null` | Searches inventory range through Prismarine window helpers. |
+| `bot.inventory.count` | `count(itemType, metadata, windowId = 0)` | number | Counts matching items in a window. |
+| `bot.inventory.applyItemStackResponse` | `applyItemStackResponse(response)` | `undefined` | Applies accepted server stack ids/counts into local inventory mirror. |
 
 ```js
-const stick = bot.findItem(bot.registry.itemsByName.stick.id)
+const stick = bot.inventory.findItem(bot.registry.itemsByName.stick.id)
 console.log(stick?.count ?? 0)
 ```
 
@@ -325,28 +367,28 @@ server responses, and inventory mirror updates.
 
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
-| `bot.sendItemStackRequest` | `sendItemStackRequest(request)` | request id | Queues request in the auth-input path and emits `inventory_action_request`. |
-| `bot.sendStandaloneItemStackRequest` | `sendStandaloneItemStackRequest(request)` | request id | Sends standalone `item_stack_request` and emits `inventory_action_request`. |
-| `bot.waitForItemStackResponse` | `waitForItemStackResponse(id, timeoutMs?)` | `Promise<response>` | Resolves only accepted responses; rejects on error/timeout. |
-| `bot.waitForRawItemStackResponse` | `waitForRawItemStackResponse(id, timeoutMs?)` | `Promise<response>` | Resolves even rejected responses for callers that need raw status. |
-| `bot.setHeldItemSlot` / `bot.selectHotbarSlot` | `selectHotbarSlot(slot)` | selected item | Sends hotbar selection and emits `held_item_slot_changed`. |
-| `bot.equipItem` / `bot.equipInventorySlot` | `async equipItem(slot, hotbarSlot = 0)` | equipped item | Selects hotbar item or swaps inventory slot into a hotbar slot. |
-| `bot.swapInventorySlots` | `async swapInventorySlots(slotA, slotB)` | response | Swaps slots. |
-| `bot.moveInventorySlot` | `async moveInventorySlot(fromSlot, toSlot)` | response | Moves the full source stack into destination. |
-| `bot.mergeInventorySlots` | `async mergeInventorySlots(fromSlot, toSlot)` | response | Moves as much as destination can accept. |
-| `bot.moveOneInventoryItem` | `async moveOneInventoryItem(fromSlot, toSlot)` | response | Moves one item. |
-| `bot.splitInventorySlot` | `async splitInventorySlot(fromSlot, toSlot)` | response | Moves half of source, rounded up. |
-| `bot.dropInventorySlot` | `async dropInventorySlot(slot, randomly = false)` | response | Drops the whole stack. |
-| `bot.dropOneInventoryItem` | `async dropOneInventoryItem(slot, randomly = false)` | response | Drops one item. |
-| `bot.destroyInventorySlot` | `async destroyInventorySlot(slot)` | response | Destroys/removes the whole stack through the request path. |
-| `bot.destroyOneInventoryItem` | `async destroyOneInventoryItem(slot)` | response | Destroys/removes one item. |
-| `bot.setInventoryActionResponseTimeout` | `setInventoryActionResponseTimeout(ms)` | `undefined` | Changes response timeout. |
-| `bot.setInventoryActionUpdateTimeout` | `setInventoryActionUpdateTimeout(ms)` | `undefined` | Changes slot update timeout. |
-| `bot.clearInventoryActionWaiters` | `clearInventoryActionWaiters()` | `undefined` | Rejects pending inventory waits. |
+| `bot.inventory.actions.send` | `send(request)` | request id | Queues request in the auth-input path and emits `inventory_action_request`. |
+| `bot.inventory.actions.sendStandalone` | `sendStandalone(request)` | request id | Sends standalone `item_stack_request` and emits `inventory_action_request`. |
+| `bot.inventory.actions.wait` | `wait(id, timeoutMs?)` | `Promise<response>` | Resolves only accepted responses; rejects on error/timeout. |
+| `bot.inventory.actions.waitRaw` | `waitRaw(id, timeoutMs?)` | `Promise<response>` | Resolves even rejected responses for callers that need raw status. |
+| `bot.inventory.select` | `select(slot)` | selected item | Sends hotbar selection and emits `held_item_slot_changed`. |
+| `bot.inventory.equip` | `async equip(slot, hotbarSlot = 0)` | equipped item | Selects hotbar item or swaps inventory slot into a hotbar slot. |
+| `bot.inventory.swap` | `async swap(slotA, slotB)` | response | Swaps slots. |
+| `bot.inventory.move` | `async move(fromSlot, toSlot)` | response | Moves the full source stack into destination. |
+| `bot.inventory.merge` | `async merge(fromSlot, toSlot)` | response | Moves as much as destination can accept. |
+| `bot.inventory.move1` | `async move1(fromSlot, toSlot)` | response | Moves one item. |
+| `bot.inventory.split` | `async split(fromSlot, toSlot)` | response | Moves half of source, rounded up. |
+| `bot.inventory.drop` | `async drop(slot, randomly = false)` | response | Drops the whole stack. |
+| `bot.inventory.drop1` | `async drop1(slot, randomly = false)` | response | Drops one item. |
+| `bot.inventory.destroy` | `async destroy(slot)` | response | Destroys/removes the whole stack through the request path. |
+| `bot.inventory.destroy1` | `async destroy1(slot)` | response | Destroys/removes one item. |
+| `bot.inventory.actions.setResponseTimeout` | `setResponseTimeout(ms)` | `undefined` | Changes response timeout. |
+| `bot.inventory.actions.setUpdateTimeout` | `setUpdateTimeout(ms)` | `undefined` | Changes slot update timeout. |
+| `bot.inventory.actions.clearWaiters` | `clearWaiters()` | `undefined` | Rejects pending inventory waits. |
 
 ```js
-await bot.equipItem(12, 0)
-await bot.dropOneInventoryItem(bot.heldItemSlot)
+await bot.inventory.equip(12, 0)
+await bot.inventory.drop1(bot.heldItemSlot)
 ```
 
 ## Containers
@@ -358,12 +400,12 @@ containers, the base wrapper API, specialized helpers, and container events.
 
 | API | Maturity | Signature | Returns | Side effects, preconditions, failures |
 | --- | --- | --- | --- | --- |
-| `bot.waitForContainerOpen` | `waitForContainerOpen(predicate?, timeoutMs?)` | `Promise<packet>` | Waits for a matching `container_open`. |
 | `bot.openContainer` / `bot.openBlockContainer` | `async openContainer(pos, opts = {})` | container API object | Looks at the block unless `opts.look === false`, sends open action, waits for window content. |
-| `bot.wrapContainerWindow` | `wrapContainerWindow(packet)` | container API object | Wraps an existing Bedrock container window. Throws if the window was not created. |
 | `bot.getCurrentContainer` | `getCurrentContainer()` | active container or `null` | Reads active container pointer. |
-| `bot.getContainer` | `getContainer(windowId)` | container or `null` | Reads by window id. |
-| `bot.openContainers` | property | `Map` | Open container wrappers keyed by window id. |
+| `bot.containers.waitForOpen` | `waitForOpen(predicate?, timeoutMs?)` | `Promise<packet>` | Waits for a matching `container_open`. |
+| `bot.containers.wrapWindow` | `wrapWindow(packet)` | container API object | Wraps an existing Bedrock container window. Throws if the window was not created. |
+| `bot.containers.get` | `get(windowId)` | container or `null` | Reads by window id. |
+| `bot.containers.open` | property | `Map` | Open container wrappers keyed by window id. |
 
 ### Base container window API
 
@@ -496,9 +538,9 @@ for emote, food, flight, environment, and related event details.
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.emotes` | `partial` | property | state object | `{ equipped, byPlayerRuntimeId }`. |
-| `bot.sendEmoteList` | `sendEmoteList(emoteIds = bot.emotes.equipped)` | equipped ids | Sends `emote_list`. Throws before self runtime id is known. |
-| `bot.equipEmotes` | `equipEmotes(emoteIds, options = {})` | equipped ids | Stores unique emote ids and optionally sends list. Throws if `emoteIds` is not an array. |
-| `bot.playEmote` / `bot.sendEmote` / `bot.emote` | `playEmote(emoteId, options = {})` | packet | Sends `emote`; records `lastSentEmote`. Throws before runtime id is known. |
+| `bot.emotes.sendList` | `sendList(emoteIds = bot.emotes.equipped)` | equipped ids | Sends `emote_list`. Throws before self runtime id is known. |
+| `bot.emotes.equip` | `equip(emoteIds, options = {})` | equipped ids | Stores unique emote ids and optionally sends list. Throws if `emoteIds` is not an array. |
+| `bot.emotes.play` / `bot.emotes.send` / `bot.emotes.emote` | `play(emoteId, options = {})` | packet | Sends an `emote`; records `bot.emotes.lastSent`. Throws before runtime id is known. |
 
 ## Food And Eating
 
@@ -553,7 +595,6 @@ Environment state fields include `time`, `timeOfDay`, `day`, `rainLevel`,
 | `bot.scoreboards.getScores` | `getScores(objectiveNameOrDisplaySlot = 'sidebar', options?)` | sorted score entries | Reads scores for any known objective or display slot. Supports `options.limit`. |
 | `bot.scoreboards.getScore` | `getScore(objectiveNameOrDisplaySlot, query)` | score entry or `null` | Finds one score by scoreboard id, display/custom name, or predicate. |
 | `bot.scoreboards.getDisplayedScores` | `getDisplayedScores(displaySlot = 'sidebar', options?)` | sorted score entries | Alias for display-slot score reads. |
-| `bot.getScoreboardObjective`, `bot.getScoreboardEntry`, `bot.getScoreboardScores`, `bot.getScoreboardScore`, `bot.getDisplayedScores` | `partial` | top-level aliases | same as mirror methods | Convenience aliases for callers that prefer bot-root methods. |
 
 The mirror listens to Bedrock `set_display_objective`, `set_score`,
 `remove_objective`, and `set_scoreboard_identity` packets. Servers only send
@@ -570,14 +611,14 @@ recipe lookup, execution, and events.
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.openTrade` / `bot.tradeWith` | `async openTrade(entity, opts?)` | trade window packet/container state | Interacts with villager-like entity and waits for trade window. |
-| `bot.waitForTradeWindow` | `waitForTradeWindow(predicate?, timeoutMs?)` | `Promise<packet>` | Waits for `update_trade`. |
-| `bot.closeTradeWindow` | `closeTradeWindow()` | `undefined` | Closes active trade/container state. |
-| `bot.currentTradeRecipes` | `currentTradeRecipes()` | recipes array | Reads recipes from current trade window. |
-| `bot.findTrade` | `findTrade(predicateOrOptions?)` | recipe/result | Finds a matching trade recipe. |
-| `bot.executeTrade` | `async executeTrade(recipeOrOptions, options?)` | response | Sends ingredient/selection/result stack requests. |
-| `bot.setTradeTimeout` | `setTradeTimeout(ms)` | `undefined` | Updates trade wait timeout. |
-| `bot.currentTradeWindow` | property | packet or `null` | Last active trade window packet. |
-| `bot.currentTradingEntity` | property | entity or `null` | Entity associated with current trade window. |
+| `bot.trading.waitForWindow` | `waitForWindow(predicate?, timeoutMs?)` | `Promise<packet>` | Waits for `update_trade`. |
+| `bot.trading.closeWindow` | `closeWindow()` | `undefined` | Closes active trade/container state. |
+| `bot.trading.currentRecipes` | `currentRecipes()` | recipes array | Reads recipes from current trade window. |
+| `bot.trading.find` | `find(predicateOrOptions?)` | recipe/result | Finds a matching trade recipe. |
+| `bot.trading.execute` | `async execute(recipeOrOptions, options?)` | response | Sends ingredient/selection/result stack requests. |
+| `bot.trading.setTimeout` | `setTimeout(ms)` | `undefined` | Updates trade wait timeout. |
+| `bot.trading.currentWindow` | property | packet or `null` | Last active trade window packet. |
+| `bot.trading.currentEntity` | property | entity or `null` | Entity associated with current trade window. |
 
 Trading is one of the most Bedrock/Geyser-specific APIs. It intentionally keeps
 some helper access available for agents because server responses can differ

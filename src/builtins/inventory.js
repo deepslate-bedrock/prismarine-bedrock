@@ -315,6 +315,14 @@ function inject (botState, options = {}) {
 
   botState.applyItemStackResponseToInventory = applyItemStackResponseToInventory
 
+  Object.assign(botState.inventory, {
+    getItem: botState.getItem,
+    findItem: botState.findItem,
+    count: botState.count,
+    applyItemStackResponse: applyItemStackResponseToInventory
+  })
+  botState._attachInventoryActions?.()
+
   botState.client.on('item_stack_response', (packet) => {
     for (const response of packet.responses || []) {
       if (itemStackResponseStatusOk(response)) applyItemStackResponseToInventory(response)

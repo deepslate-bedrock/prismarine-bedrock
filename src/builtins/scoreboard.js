@@ -321,26 +321,6 @@ module.exports = function scoreboardPlugin (botState) {
     }
   }
 
-  function getScoreboardObjective (objectiveNameOrSlot) {
-    return botState.scoreboards.getObjective(objectiveNameOrSlot)
-  }
-
-  function getScoreboardEntry (scoreboardId) {
-    return botState.scoreboards.getEntry(scoreboardId)
-  }
-
-  function getScoreboardScores (objectiveNameOrSlot = 'sidebar', options = {}) {
-    return botState.scoreboards.getScores(objectiveNameOrSlot, options)
-  }
-
-  function getDisplayedScores (displaySlot = 'sidebar', options = {}) {
-    return botState.scoreboards.getDisplayedScores(displaySlot, options)
-  }
-
-  function getScoreboardScore (objectiveNameOrSlot, query) {
-    return botState.scoreboards.getScore(objectiveNameOrSlot, query)
-  }
-
   client.on('set_display_objective', packet => applyDisplayObjective(packet))
   client.on('set_score', applyScorePacket)
   client.on('remove_objective', packet => removeObjective(packet.objective_name, packet))
@@ -349,11 +329,6 @@ module.exports = function scoreboardPlugin (botState) {
     botState.scoreboards.reset()
   })
 
-  botState.getScoreboardObjective = getScoreboardObjective
-  botState.getScoreboardEntry = getScoreboardEntry
-  botState.getScoreboardScores = getScoreboardScores
-  botState.getScoreboardScore = getScoreboardScore
-  botState.getDisplayedScores = getDisplayedScores
   botState.scoreboardHelpers = {
     idKey,
     normalizeAction,

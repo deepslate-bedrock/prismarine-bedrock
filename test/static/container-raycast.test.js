@@ -88,6 +88,11 @@ describe('container ray casting', function () {
   it('uses ray casting to choose the open-container face when no face is supplied', async function () {
     const state = createState()
 
+    assert.strictEqual(typeof state.containers.waitForOpen, 'function')
+    assert.strictEqual(typeof state.containers.wrapWindow, 'function')
+    assert.strictEqual(typeof state.containers.get, 'function')
+    assert(state.containers.open instanceof Map)
+
     await state.openContainer(new Vec3(0, 0, 0), {
       type: 'container',
       look: false

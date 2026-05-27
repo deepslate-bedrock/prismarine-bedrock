@@ -162,7 +162,7 @@ Gap:
 This repo:
 
 - Implements Bedrock `item_stack_request` actions in `src/builtins/inventory-actions.js`.
-- Exposes `sendItemStackRequest`, `sendStandaloneItemStackRequest`, `waitForItemStackResponse`, `waitForRawItemStackResponse`, `setHeldItemSlot`, `selectHotbarSlot`, `equipItem`, `equipInventorySlot`, `swapInventorySlots`, `moveInventorySlot`, `mergeInventorySlots`, `moveOneInventoryItem`, `splitInventorySlot`, `dropInventorySlot`, `dropOneInventoryItem`, `destroyInventorySlot`, and `destroyOneInventoryItem`.
+- Groups request helpers under `bot.inventory.actions` and common slot actions under `bot.inventory`, including `select`, `equip`, `swap`, `move`, `merge`, `move1`, `split`, `drop`, `drop1`, `destroy`, and `destroy1`.
 - Applies accepted server responses back to the local inventory mirror.
 - Provides helper builders for stack request slots, take/swap/drop/destroy actions, cloning, stack IDs, max stack size, response status, and item comparison.
 
@@ -180,7 +180,7 @@ Gap:
 This repo:
 
 - Implements generic container opening and transfer helpers in `src/builtins/containers/index.js`.
-- Supports `openContainer`, `openBlockContainer`, `wrapContainerWindow`, `getCurrentContainer`, `getContainer`, active container tracking, and pending container data replay.
+- Supports top-level `openContainer`, `openBlockContainer`, and `getCurrentContainer`; bookkeeping helpers live under `bot.containers` as `wrapWindow`, `get`, and `open`.
 - Provides container actions: get item, first empty slot, find item, deposit, withdraw, move, swap, wait for content, and close.
 - Specializes multiple container types through files under `src/builtins/containers/`: anvil, armor, beacon, brewing stand, cartography table, crafter, enchantment table, furnace, grindstone, loom, smithing table, stonecutter, trading, workbench, and helpers.
 - Tracks furnace and brewing progress/data in more detail than a simple generic window wrapper.
@@ -240,7 +240,7 @@ This repo:
 
 - Implements villager trading in `src/builtins/trading.js`.
 - Supports opening trade windows, tracking trade recipes, finding trades, building trade stack requests, transferring ingredients, taking results, restoring excess inputs, waiting for outputs, and executing trades.
-- Exposes `openTrade`, `tradeWith`, `waitForTradeWindow`, `closeTradeWindow`, `currentTradeRecipes`, `findTrade`, `executeTrade`, `tradeHelpers`, and `setTradeTimeout`.
+- Keeps `openTrade` and `tradeWith` as the primary top-level actions, with related helpers grouped under `bot.trading` (`waitForWindow`, `closeWindow`, `currentRecipes`, `find`, `execute`, `helpers`, and `setTimeout`).
 
 Mineflayer:
 

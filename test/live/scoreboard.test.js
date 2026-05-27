@@ -43,7 +43,7 @@ async function connectBot () {
 }
 
 function displayedEntry (botState, entryName) {
-  return botState.getDisplayedScores('sidebar')
+  return botState.scoreboards.getDisplayedScores('sidebar')
     .find(entry => entry.customName === entryName || entry.displayName === entryName)
 }
 
@@ -68,8 +68,8 @@ describe('live scoreboard builtin', function () {
 
   it('mirrors scoreboard creation, score updates, and objective deletion', async function () {
     assert(botState.scoreboards, 'scoreboard state is missing')
-    assert.strictEqual(typeof botState.getScoreboardObjective, 'function')
-    assert.strictEqual(typeof botState.getDisplayedScores, 'function')
+    assert.strictEqual(typeof botState.scoreboards.getObjective, 'function')
+    assert.strictEqual(typeof botState.scoreboards.getDisplayedScores, 'function')
 
     objectiveName = uniqueObjectiveName()
     const entryName = `line${objectiveName.slice(2)}`
@@ -80,7 +80,7 @@ describe('live scoreboard builtin', function () {
     const displayedObjective = await waitUntil(
       `scoreboard objective ${objectiveName} to display`,
       () => {
-        const objective = botState.getScoreboardObjective('sidebar')
+        const objective = botState.scoreboards.getObjective('sidebar')
         return objective?.name === objectiveName ? objective : false
       },
       10000,
@@ -128,8 +128,8 @@ describe('live scoreboard builtin', function () {
     await waitUntil(
       `scoreboard objective ${objectiveName} removal`,
       () => {
-        const objective = botState.getScoreboardObjective(objectiveName)
-        const displayed = botState.getScoreboardObjective('sidebar')
+        const objective = botState.scoreboards.getObjective(objectiveName)
+        const displayed = botState.scoreboards.getObjective('sidebar')
         return !objective && (!displayed || displayed.name !== objectiveName)
       },
       10000,
@@ -137,7 +137,7 @@ describe('live scoreboard builtin', function () {
       botState
     )
 
-    assert.strictEqual(botState.getDisplayedScores('sidebar').some(entry => entry.objectiveName === objectiveName), false)
+    assert.strictEqual(botState.scoreboards.getDisplayedScores('sidebar').some(entry => entry.objectiveName === objectiveName), false)
     objectiveName = null
   })
 })

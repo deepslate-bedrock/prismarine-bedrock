@@ -116,16 +116,6 @@ The sort follows the objective's Bedrock `sortOrder`, then display name as a
 stable tie-breaker. Pass `{ limit: 15 }` when you only need the visible top
 portion.
 
-For convenience, the bot root also exposes aliases:
-
-```js
-bot.getScoreboardObjective('sidebar')
-bot.getScoreboardEntry(12n)
-bot.getScoreboardScores('kills')
-bot.getScoreboardScore('sidebar', 'Steve')
-bot.getDisplayedScores('sidebar')
-```
-
 ## Events
 
 The builtin emits higher-level events after applying packets:

@@ -8,9 +8,9 @@ scripts but do not need the larger window/world APIs.
 | API | Purpose |
 | --- | --- |
 | `bot.emotes` | State object with equipped emotes and per-player emote lists. |
-| `bot.sendEmoteList(emoteIds = bot.emotes.equipped)` | Sends `emote_list`. |
-| `bot.equipEmotes(emoteIds, options = {})` | Stores unique emote ids and optionally sends the list. |
-| `bot.playEmote(emoteId, options = {})` / `bot.sendEmote` / `bot.emote` | Sends an `emote` packet and records `lastSentEmote`. |
+| `bot.emotes.sendList(emoteIds = bot.emotes.equipped)` | Sends `emote_list`. |
+| `bot.emotes.equip(emoteIds, options = {})` | Stores unique emote ids and optionally sends the list. |
+| `bot.emotes.play(emoteId, options = {})` / `bot.emotes.send` / `bot.emotes.emote` | Sends an `emote` packet and records `bot.emotes.lastSent`. |
 
 ## Food And Eating
 
@@ -61,4 +61,3 @@ Environment fields include `time`, `timeOfDay`, `day`, `rainLevel`,
 | `flightRequest` | `{ flying, state }` |
 | `time` / `environmentTime` | Time payload. |
 | `weather` / `environmentWeather` | Weather payload. |
-

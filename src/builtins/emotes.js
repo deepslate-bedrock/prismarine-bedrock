@@ -85,7 +85,7 @@ module.exports = function emotesPlugin (botState, options = {}) {
     }
 
     client.queue('emote', packet)
-    botState.lastSentEmote = {
+    botState.emotes.lastSent = {
       ...packet,
       sentAt: Date.now()
     }
@@ -152,9 +152,11 @@ module.exports = function emotesPlugin (botState, options = {}) {
     })
   })
 
-  botState.sendEmoteList = sendEmoteList
-  botState.equipEmotes = equipEmotes
-  botState.playEmote = playEmote
-  botState.sendEmote = playEmote
-  botState.emote = playEmote
+  Object.assign(botState.emotes, {
+    sendList: sendEmoteList,
+    equip: equipEmotes,
+    play: playEmote,
+    send: playEmote,
+    emote: playEmote
+  })
 }

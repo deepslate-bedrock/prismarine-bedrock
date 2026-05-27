@@ -7,12 +7,12 @@ transfer API, and specializes known container types with slot-aware helpers.
 
 | API | Purpose |
 | --- | --- |
-| `bot.waitForContainerOpen(predicate?, timeoutMs?)` | Waits for a matching `container_open`. |
 | `bot.openContainer(pos, opts = {})` / `bot.openBlockContainer` | Looks at a block, sends open action, and waits for content. |
-| `bot.wrapContainerWindow(packet)` | Wraps an existing Bedrock container window. |
 | `bot.getCurrentContainer()` | Reads the active container pointer. |
-| `bot.getContainer(windowId)` | Reads an open container by window id. |
-| `bot.openContainers` | Map of open wrappers keyed by window id. |
+| `bot.containers.waitForOpen(predicate?, timeoutMs?)` | Waits for a matching `container_open`. |
+| `bot.containers.wrapWindow(packet)` | Wraps an existing Bedrock container window. |
+| `bot.containers.get(windowId)` | Reads an open container by window id. |
+| `bot.containers.open` | Map of open wrappers keyed by window id. |
 
 ```js
 const chest = await bot.openContainer(new Vec3(10, 64, 10))
@@ -68,4 +68,3 @@ destination stacks, and insufficient destination space.
 | --- | --- |
 | `container_data` | `{ windowId, container, property, value, packet, handled }` |
 | `player_enchant_options` | `{ container, packet, handled }` |
-

@@ -93,7 +93,7 @@ function apply (container) {
       throw new Error(`Enchant option is missing recipeNetworkId: ${JSON.stringify(option)}`)
     }
 
-    const helpers = container.botState?.inventoryActionHelpers
+    const helpers = container.botState?.inventory?.actions ?? container.botState?.inventoryActionHelpers
     if (!helpers) throw new Error('inventory-actions builtin is required before selecting enchant options')
 
     const request = helpers.makeRequest([{
@@ -101,8 +101,8 @@ function apply (container) {
       recipe_network_id: option.recipeNetworkId,
       times_crafted: 1
     }])
-    const id = container.botState.sendItemStackRequest(request)
-    return container.botState.waitForItemStackResponse(id)
+    const id = helpers.send(request)
+    return helpers.wait(id)
   }
 
   return container

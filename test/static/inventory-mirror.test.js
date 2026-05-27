@@ -4,6 +4,7 @@ const assert = require('assert')
 const { EventEmitter } = require('events')
 
 const injectInventory = require('../../src/builtins/inventory')
+const injectInventoryActions = require('../../src/builtins/inventory-actions')
 const { bedrockRegistryName, DEFAULT_BEDROCK_VERSION } = require('../../src/version')
 
 function createBotState () {
@@ -18,6 +19,26 @@ function createBotState () {
 }
 
 describe('inventory mirror', function () {
+  it('groups inventory slot actions and low-level request helpers on bot.inventory', function () {
+    const botState = createBotState()
+    injectInventoryActions(botState, {})
+    injectInventory(botState, {})
+
+    assert.strictEqual(typeof botState.inventory.select, 'function')
+    assert.strictEqual(typeof botState.inventory.equip, 'function')
+    assert.strictEqual(typeof botState.inventory.move1, 'function')
+    assert.strictEqual(typeof botState.inventory.drop1, 'function')
+    assert.strictEqual(typeof botState.inventory.destroy1, 'function')
+    assert.strictEqual(typeof botState.inventory.getItem, 'function')
+    assert.strictEqual(typeof botState.inventory.findItem, 'function')
+    assert.strictEqual(typeof botState.inventory.count, 'function')
+    assert.strictEqual(typeof botState.inventory.actions.send, 'function')
+    assert.strictEqual(typeof botState.inventory.actions.sendStandalone, 'function')
+    assert.strictEqual(typeof botState.inventory.actions.wait, 'function')
+    assert.strictEqual(typeof botState.inventory.actions.waitRaw, 'function')
+    assert.strictEqual(typeof botState.inventory.actions.makeRequest, 'function')
+  })
+
   it('mirrors armor and offhand as persistent windows while keeping ui as a slot map', function () {
     const botState = createBotState()
     injectInventory(botState, {})

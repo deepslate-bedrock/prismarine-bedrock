@@ -6,10 +6,10 @@
 // actions through player_auth_input via auth-input.js.
 //
 // Provides:
-//   botState.sendItemStackRequest(request)
-//   botState.sendStandaloneItemStackRequest(request)
-//   botState.waitForItemStackResponse(requestId)
-//   botState.waitForRawItemStackResponse(requestId)
+//   botState.inventory.actions.send(request)
+//   botState.inventory.actions.sendStandalone(request)
+//   botState.inventory.actions.wait(requestId)
+//   botState.inventory.actions.waitRaw(requestId)
 //   botState.setHeldItemSlot(slot)
 //   botState.selectHotbarSlot(slot)
 //   botState.equipItem(slot, [hotbarSlot])
@@ -17,12 +17,12 @@
 //   botState.swapInventorySlots(slotA, slotB)
 //   botState.moveInventorySlot(fromSlot, toSlot)
 //   botState.mergeInventorySlots(fromSlot, toSlot)
-//   botState.moveOneInventoryItem(fromSlot, toSlot)
+//   botState.inventory.move1(fromSlot, toSlot)
 //   botState.splitInventorySlot(fromSlot, toSlot)
 //   botState.dropInventorySlot(slot)
-//   botState.dropOneInventoryItem(slot)
+//   botState.inventory.drop1(slot)
 //   botState.destroyInventorySlot(slot)
-//   botState.destroyOneInventoryItem(slot)
+//   botState.inventory.destroy1(slot)
 
 const {
   cloneItem,
@@ -510,6 +510,51 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     pendingSlotUpdates.clear()
   }
 
+  function attachInventoryActions () {
+    if (!botState.inventory) return
+
+    Object.assign(botState.inventory, {
+      select: selectHotbarSlot,
+      equip: equipItem,
+      swap: swapInventorySlots,
+      move: moveInventorySlot,
+      merge: mergeInventorySlots,
+      move1: moveOneInventoryItem,
+      split: splitInventorySlot,
+      drop: dropInventorySlot,
+      drop1: dropOneInventoryItem,
+      destroy: destroyInventorySlot,
+      destroy1: destroyOneInventoryItem
+    })
+
+    botState.inventory.actions = {
+      send: sendItemStackRequest,
+      sendStandalone: sendStandaloneItemStackRequest,
+      wait: waitForItemStackResponse,
+      waitRaw: waitForRawItemStackResponse,
+      setResponseTimeout: ms => {
+        responseTimeoutMs = ms
+      },
+      setUpdateTimeout: ms => {
+        inventoryUpdateTimeoutMs = ms
+      },
+      clearWaiters: clearInventoryActionWaiters,
+      makeRequest,
+      takeAction,
+      placeAction,
+      swapAction,
+      dropAction,
+      destroyAction,
+      stackSlotInfo: stackRequestSlotInfo,
+      cloneItem,
+      setStackId,
+      maxStackSize,
+      sameItem,
+      responseStatusOk: itemStackResponseStatusOk,
+      parseItemStackResponsePacket
+    }
+  }
+
   botState.sendItemStackRequest = sendItemStackRequest
   botState.sendStandaloneItemStackRequest = sendStandaloneItemStackRequest
 
@@ -539,6 +584,10 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   botState.destroyOneInventoryItem = destroyOneInventoryItem
 
   botState.inventoryActionHelpers = {
+    send: sendItemStackRequest,
+    sendStandalone: sendStandaloneItemStackRequest,
+    wait: waitForItemStackResponse,
+    waitRaw: waitForRawItemStackResponse,
     makeRequest,
     takeAction,
     placeAction,
@@ -563,6 +612,8 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   botState.clearInventoryActionWaiters = clearInventoryActionWaiters
+  botState._attachInventoryActions = attachInventoryActions
+  attachInventoryActions()
 
   client.on('close', clearInventoryActionWaiters)
 }

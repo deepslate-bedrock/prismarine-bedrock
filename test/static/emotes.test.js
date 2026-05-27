@@ -26,7 +26,7 @@ describe('emotes builtin', () => {
     const botState = createBotState()
     injectEmotes(botState)
 
-    const packet = botState.playEmote('00000000-0000-0000-0000-000000000000', {
+    const packet = botState.emotes.play('00000000-0000-0000-0000-000000000000', {
       lengthTicks: 60,
       flags: { mute_chat: true }
     })
@@ -48,7 +48,7 @@ describe('emotes builtin', () => {
     const botState = createBotState()
     injectEmotes(botState)
 
-    const equipped = botState.equipEmotes([
+    const equipped = botState.emotes.equip([
       '11111111-1111-1111-1111-111111111111',
       '11111111-1111-1111-1111-111111111111',
       '22222222-2222-2222-2222-222222222222'

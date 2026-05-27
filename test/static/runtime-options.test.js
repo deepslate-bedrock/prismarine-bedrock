@@ -227,17 +227,49 @@ describe('runtime options', function () {
       username: 'RuntimeOptionsBot',
       physicsEnabled: false
     })
-    const plugin = (botState) => {
+    const seenEvents = []
+    const plugin = (botState, options) => {
       botState.loaderTestRan = true
+      botState.loaderTestOptions = options
     }
 
     assert.strictEqual(typeof bot.loadPlugin, 'undefined')
+    bot.on('pluginsLoaded', event => seenEvents.push(event))
     pluginLoader.loadPlugin(bot, plugin)
     assert.strictEqual(pluginLoader.hasPlugin(bot, plugin), true)
+    assert.strictEqual(pluginLoader.isPluginLoaded(bot, plugin), false)
     pluginLoader.injectPlugins(bot)
 
     assert.strictEqual(bot.loaderTestRan, true)
+    assert.strictEqual(bot.loaderTestOptions, bot.options)
     assert.strictEqual(bot.pluginLoader, undefined)
     assert.strictEqual(pluginLoader.isInjected(bot), true)
+    assert.strictEqual(pluginLoader.isPluginLoaded(bot, plugin), true)
+    assert.strictEqual(seenEvents.length, 1)
+    assert.deepStrictEqual(seenEvents[0].plugins, [plugin])
+    assert.strictEqual(seenEvents[0].bot, bot)
+  })
+
+  it('does not reinstall the same plugin for the same bot', function () {
+    const bot = new BotState({
+      username: 'RuntimeOptionsBot',
+      physicsEnabled: false
+    })
+    let installs = 0
+    let pluginsLoadedEvents = 0
+    const plugin = () => {
+      installs++
+    }
+    bot.on('pluginsLoaded', () => {
+      pluginsLoadedEvents++
+    })
+
+    pluginLoader.loadPlugin(bot, plugin)
+    pluginLoader.loadPlugin(bot, plugin)
+    pluginLoader.injectPlugins(bot)
+    pluginLoader.injectPlugins(bot)
+
+    assert.strictEqual(installs, 1)
+    assert.strictEqual(pluginsLoadedEvents, 1)
   })
 })

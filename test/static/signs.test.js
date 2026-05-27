@@ -63,7 +63,7 @@ describe('signs builtin', function () {
       backText: 'back line'
     }))
 
-    const sign = await botState.readSign(new Vec3(1, 64, 1))
+    const sign = await botState.signs.read(new Vec3(1, 64, 1))
 
     assert.strictEqual(sign.frontText, 'front line')
     assert.strictEqual(sign.backText, 'back line')
@@ -77,7 +77,7 @@ describe('signs builtin', function () {
       backText: 'keep'
     }))
 
-    const result = await botState.editSign(pos, ['new', 'text'], { waitForServer: false })
+    const result = await botState.signs.edit(pos, ['new', 'text'], { waitForServer: false })
     const packet = botState.client.queued.find(entry => entry.name === 'block_entity_data')
 
     assert(packet)
@@ -93,7 +93,7 @@ describe('signs builtin', function () {
     const pos = new Vec3(2, 64, 2)
     const botState = createBotState(null)
 
-    await botState.editSign(pos, 'new text', { waitForServer: false })
+    await botState.signs.edit(pos, 'new text', { waitForServer: false })
     const packet = botState.client.queued.find(entry => entry.name === 'block_entity_data')
     const value = packet.params.nbt.value
 
@@ -115,7 +115,7 @@ describe('signs builtin', function () {
       backText: 'old back'
     }))
 
-    await botState.editSign(pos, 'new back', { side: 'back', waitForServer: false })
+    await botState.signs.edit(pos, 'new back', { side: 'back', waitForServer: false })
     const packet = botState.client.queued.find(entry => entry.name === 'block_entity_data')
 
     assert.strictEqual(packet.params.nbt.value.FrontText.value.Text.value, 'keep front')
@@ -126,7 +126,7 @@ describe('signs builtin', function () {
     const botState = createBotState(signEntity(new Vec3(4, 64, 4), { waxed: true }))
 
     await assert.rejects(
-      () => botState.editSign(new Vec3(4, 64, 4), 'blocked', { waitForServer: false }),
+      () => botState.signs.edit(new Vec3(4, 64, 4), 'blocked', { waitForServer: false }),
       /waxed sign/
     )
   })
@@ -136,7 +136,7 @@ describe('signs builtin', function () {
     const botState = createBotState(signEntity(pos))
     botState.client.entityId = 1n
 
-    const openedPromise = botState.openSignEditor(pos, { face: 2 })
+    const openedPromise = botState.signs.openEditor(pos, { face: 2 })
     setImmediate(() => {
       botState.client.emit('open_sign', {
         position: { x: 0, y: 64, z: 3 },
@@ -167,7 +167,7 @@ describe('signs builtin', function () {
     })
     botState.client.entityId = 1n
 
-    const openedPromise = botState.openSignEditor(pos, { look: false })
+    const openedPromise = botState.signs.openEditor(pos, { look: false })
     setImmediate(() => {
       botState.client.emit('open_sign', {
         position: { x: 0, y: 64, z: 3 },
@@ -187,7 +187,7 @@ describe('signs builtin', function () {
     const botState = createBotState(signEntity(pos))
     botState.client.entityId = 1n
 
-    const openedPromise = botState.openSignEditor(pos, { face: 2 })
+    const openedPromise = botState.signs.openEditor(pos, { face: 2 })
     setImmediate(() => {
       botState.client.emit('open_sign', {
         position: { x: 0, y: 64, z: 3 },
@@ -196,7 +196,7 @@ describe('signs builtin', function () {
     })
     await openedPromise
 
-    assert.strictEqual(botState.closeSignEditor(pos), true)
+    assert.strictEqual(botState.signs.closeEditor(pos), true)
     const stop = botState.client.queued.find(entry => entry.params?.action === 'stop_item_use_on')
 
     assert.strictEqual(stop.params.action, 'stop_item_use_on')
@@ -211,7 +211,7 @@ describe('signs builtin', function () {
     const botState = createBotState(signEntity(pos))
     botState.client.entityId = 1n
 
-    const editPromise = botState.editSign(pos, 'Alpha\nBeta\nGamma\n', { face: 2 })
+    const editPromise = botState.signs.edit(pos, 'Alpha\nBeta\nGamma\n', { face: 2 })
     setImmediate(() => {
       botState.client.emit('open_sign', {
         position: { x: 0, y: 64, z: 3 },
@@ -234,7 +234,7 @@ describe('signs builtin', function () {
     const botState = createBotState(signEntity(pos))
 
     await assert.rejects(
-      () => botState.editSign(pos, 'blocked', { open: false, timeoutMs: 10 }),
+      () => botState.signs.edit(pos, 'blocked', { open: false, timeoutMs: 10 }),
       /Sign editor is not open/
     )
   })

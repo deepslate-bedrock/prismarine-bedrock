@@ -2,6 +2,8 @@ const fs = require('fs')
 const path = require('path')
 
 const loaderStates = new WeakMap()
+const installedPluginBots = new WeakMap()
+const INSTALLED_PLUGIN_BOTS = Symbol.for('prismarine-bedrock.plugin-loader.installedBots')
 const builtinLoadPriority = {
   'world.js': -100,
   'setup.js': -90,
@@ -19,12 +21,55 @@ function ensureState (botState) {
   return loaderStates.get(botState)
 }
 
-function loadPlugin (botState, plugin) {
-  const state = ensureState(botState)
-  if (state.plugins.includes(plugin)) return
+function loadedBotsFor (plugin) {
+  if (plugin[INSTALLED_PLUGIN_BOTS]) return plugin[INSTALLED_PLUGIN_BOTS]
+  if (installedPluginBots.has(plugin)) return installedPluginBots.get(plugin)
 
-  state.plugins.push(plugin)
-  if (state.injected) plugin(botState, botState.options)
+  const loadedBots = new WeakSet()
+  try {
+    Object.defineProperty(plugin, INSTALLED_PLUGIN_BOTS, {
+      configurable: false,
+      enumerable: false,
+      value: loadedBots
+    })
+  } catch {
+    installedPluginBots.set(plugin, loadedBots)
+  }
+
+  return loadedBots
+}
+
+function validatePlugin (plugin) {
+  if (typeof plugin !== 'function') {
+    throw new TypeError('[plugin-loader] plugin must be an install function')
+  }
+}
+
+function markPluginLoaded (botState, plugin) {
+  loadedBotsFor(plugin).add(botState)
+}
+
+function isPluginLoaded (botState, plugin) {
+  if (typeof plugin !== 'function') return false
+  return loadedBotsFor(plugin).has(botState)
+}
+
+function installPlugin (botState, plugin) {
+  validatePlugin(plugin)
+  if (isPluginLoaded(botState, plugin)) return false
+
+  plugin(botState, botState.options)
+  markPluginLoaded(botState, plugin)
+  return true
+}
+
+function loadPlugin (botState, plugin) {
+  validatePlugin(plugin)
+
+  const state = ensureState(botState)
+  if (!state.plugins.includes(plugin)) state.plugins.push(plugin)
+
+  if (state.injected) installPlugin(botState, plugin)
 }
 
 function loadPlugins (botState, plugins = []) {
@@ -32,7 +77,7 @@ function loadPlugins (botState, plugins = []) {
 }
 
 function hasPlugin (botState, plugin) {
-  return ensureState(botState).plugins.includes(plugin)
+  return ensureState(botState).plugins.includes(plugin) || isPluginLoaded(botState, plugin)
 }
 
 function isInjected (botState) {
@@ -41,8 +86,11 @@ function isInjected (botState) {
 
 function injectPlugins (botState) {
   const state = ensureState(botState)
-  state.plugins.forEach(plugin => plugin(botState, botState.options))
+  if (state.injected) return
+
+  state.plugins.forEach(plugin => installPlugin(botState, plugin))
   state.injected = true
+  botState.emit?.('pluginsLoaded', { plugins: [...state.plugins], bot: botState })
 }
 
 function shouldLoadBuiltin (botState, entry) {
@@ -91,6 +139,8 @@ module.exports = {
   hasPlugin,
   injectAll,
   injectPlugins,
+  installPlugin,
+  isPluginLoaded,
   isInjected,
   loadBuiltins,
   loadPlugin,

@@ -60,10 +60,11 @@ module.exports = function containersPlugin (botState, options = {}) {
   const pendingContainerData = new Map()
 
   function helpers () {
-    if (!botState.inventoryActionHelpers) {
+    const inventoryActions = botState.inventory?.actions ?? botState.inventoryActionHelpers
+    if (!inventoryActions) {
       throw new Error('inventory-actions builtin is required before using container actions')
     }
-    return botState.inventoryActionHelpers
+    return inventoryActions
   }
 
   function waitForContainerOpen (predicate = () => true, timeoutMs = openTimeoutMs) {
@@ -464,8 +465,8 @@ module.exports = function containersPlugin (botState, options = {}) {
     const destinationItem = helpers().cloneItem(refItem(destination))
     const action = helpers().takeAction(amount, requestSlot(source), requestSlot(destination))
     const request = helpers().makeRequest([action])
-    const id = botState.sendStandaloneItemStackRequest(request)
-    const response = await botState.waitForItemStackResponse(id)
+    const id = helpers().sendStandalone(request)
+    const response = await helpers().wait(id)
 
     applyTransfer(source, destination, amount, sourceItem, destinationItem)
     applyServerSlots(response, [source, destination])
@@ -477,8 +478,8 @@ module.exports = function containersPlugin (botState, options = {}) {
     const destinationItem = helpers().cloneItem(refItem(destination))
     const action = helpers().swapAction(requestSlot(source), requestSlot(destination))
     const request = helpers().makeRequest([action])
-    const id = botState.sendStandaloneItemStackRequest(request)
-    const response = await botState.waitForItemStackResponse(id)
+    const id = helpers().sendStandalone(request)
+    const response = await helpers().wait(id)
 
     updateRef(source, helpers().cloneItem(destinationItem))
     updateRef(destination, helpers().cloneItem(sourceItem))
@@ -618,13 +619,15 @@ module.exports = function containersPlugin (botState, options = {}) {
     }
   }
 
-  botState.waitForContainerOpen = waitForContainerOpen
   botState.openContainer = openContainer
   botState.openBlockContainer = openContainer
-  botState.wrapContainerWindow = wrapContainerWindow
   botState.getCurrentContainer = () => activeContainer
-  botState.getContainer = windowId => getContainerForWindowId(windowId)
-  botState.openContainers = openContainers
+  botState.containers = {
+    waitForOpen: waitForContainerOpen,
+    wrapWindow: wrapContainerWindow,
+    get: windowId => getContainerForWindowId(windowId),
+    open: openContainers
+  }
 
   botState.on('inventory_trade_window_updated', (_windowId, _win, packet) => {
     wrapContainerWindow(packet)
