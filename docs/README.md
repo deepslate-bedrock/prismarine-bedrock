@@ -23,6 +23,7 @@ const bot = createBot({
 ## Reference Docs
 
 - [API reference](API.md)
+- [Example plugin](https://github.com/deepslate-bedrock/bedrock-example-plugin)
 - [Mineflayer feature comparison](reference/mineflayer-feature-comparison.md)
 - [Scoreboard handling](reference/scoreboards.md)
 
