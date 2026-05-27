@@ -2,7 +2,7 @@
 // Auto-loaded by plugin-loader.
 // Provides botState.dig(block).
 
-const { logAction, toVec3i } = require('../utils')
+const { blockFaceFromEye, blockFaceFromVector, logAction, toVec3i } = require('../utils')
 
 module.exports = (botState, options = {}) => {
   const digState = {
@@ -82,35 +82,6 @@ module.exports = (botState, options = {}) => {
       finishDigState('aborted', new Error(`Timed out waiting for dig completion at ${digState.target}`))
     }, timeoutMs)
     digState.timeout.unref?.()
-  }
-
-  function blockFace (pos) {
-    const eye = botState.self.position
-    const center = {
-      x: Math.floor(pos.x) + 0.5,
-      y: Math.floor(pos.y) + 0.5,
-      z: Math.floor(pos.z) + 0.5
-    }
-    const dx = eye.x - center.x
-    const dy = eye.y - center.y
-    const dz = eye.z - center.z
-
-    if (Math.abs(dy) >= Math.abs(dx) && Math.abs(dy) >= Math.abs(dz)) return dy > 0 ? 1 : 0
-    if (Math.abs(dx) >= Math.abs(dz)) return dx > 0 ? 5 : 4
-    return dz > 0 ? 3 : 2
-  }
-
-  function faceVectorToBlockFace (face) {
-    if (Number.isInteger(face)) return face
-    if (!face || face === 'auto' || face === 'raycast') return null
-
-    const x = Number(face.x) || 0
-    const y = Number(face.y) || 0
-    const z = Number(face.z) || 0
-
-    if (Math.abs(y) >= Math.abs(x) && Math.abs(y) >= Math.abs(z)) return y >= 0 ? 1 : 0
-    if (Math.abs(x) >= Math.abs(z)) return x >= 0 ? 5 : 4
-    return z >= 0 ? 3 : 2
   }
 
   function targetPointForDigFace (block, digFace) {
@@ -200,7 +171,7 @@ module.exports = (botState, options = {}) => {
       digState.startTime = null
       digState.startTick = null
       digState.digTicks = Math.max(1, Math.ceil(ms / 50))
-      digState.face = faceVectorToBlockFace(digFace) ?? blockFace(pos)
+      digState.face = blockFaceFromVector(digFace) ?? blockFaceFromEye(botState.self.position, pos)
       digState.started = false
       digState.predicted = false
       digState.resolve = resolve

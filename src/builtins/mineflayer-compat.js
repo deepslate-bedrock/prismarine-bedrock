@@ -4,6 +4,13 @@ const { Vec3 } = require('vec3')
 const { bedrockRegistryName } = require('../version')
 const { getConstants } = require('./physics-constants')
 const { createPathfinderPhysicsShim } = require('./physics/pathfinder-physics-shim')
+const {
+  blockFaceFromVector,
+  degreesToRadians,
+  javaYawRadiansToBedrockDegrees,
+  normalizeBlockPos,
+  radiansToDegrees
+} = require('../utils')
 
 const FACADE = Symbol('mineflayerCompatFacade')
 const ENTITY_FACADE = Symbol('mineflayerCompatEntityFacade')
@@ -89,10 +96,6 @@ function toMineflayerPosition (entity) {
   return entity.position.offset(0, -eyeHeight, 0)
 }
 
-function fromMineflayerYaw (yawDegrees) {
-  return (Number(yawDegrees) || 0) * Math.PI / 180
-}
-
 function entityFacade (botState) {
   if (botState[ENTITY_FACADE]) return botState[ENTITY_FACADE]
 
@@ -101,8 +104,8 @@ function entityFacade (botState) {
       const entity = ensureMineflayerEntityDefaults(botState.self)
       if (!entity) return undefined
       if (prop === 'position') return toMineflayerPosition(entity)
-      if (prop === 'yaw') return fromMineflayerYaw(entity.yaw)
-      if (prop === 'pitch') return fromMineflayerYaw(entity.pitch)
+      if (prop === 'yaw') return degreesToRadians(entity.yaw)
+      if (prop === 'pitch') return degreesToRadians(entity.pitch)
       return bindFunction(entity, entity[prop])
     },
 
@@ -164,14 +167,8 @@ function registryFacade (botState) {
   return botState[REGISTRY_FACADE]
 }
 
-function floorVec3Like (pos) {
-  if (!pos) return pos
-  if (typeof pos.floored === 'function') return pos.floored()
-  return new Vec3(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))
-}
-
 function blockAt (botState, pos) {
-  const blockPos = floorVec3Like(pos)
+  const blockPos = pos ? normalizeBlockPos(pos) : pos
   if (!blockPos) return null
 
   const getter = botState.world?.sync?.getBlock || botState.world?.getBlock
@@ -214,7 +211,7 @@ function findBlocks (botState, options = {}) {
 
   const maxDistance = Math.max(0, Math.floor(options.maxDistance ?? 16))
   const count = Number.isFinite(options.count) ? Math.max(0, options.count) : Infinity
-  const center = floorVec3Like(origin)
+  const center = normalizeBlockPos(origin)
   const matches = []
 
   for (let y = -maxDistance; y <= maxDistance; y++) {
@@ -328,19 +325,6 @@ async function unequipCompat (botState, destination = 'hand') {
   throw new Error(`Mineflayer compat unequip destination ${destination} is not backed by a Bedrock equipment action yet`)
 }
 
-function faceVectorToBedrockFace (face) {
-  if (Number.isInteger(face)) return face
-  if (!face) return undefined
-
-  const x = Number(face.x) || 0
-  const y = Number(face.y) || 0
-  const z = Number(face.z) || 0
-
-  if (Math.abs(y) >= Math.abs(x) && Math.abs(y) >= Math.abs(z)) return y >= 0 ? 1 : 0
-  if (Math.abs(x) >= Math.abs(z)) return x >= 0 ? 5 : 4
-  return z >= 0 ? 3 : 2
-}
-
 function blockPosition (blockOrPos) {
   if (!blockOrPos) return null
   const pos = blockOrPos.position || blockOrPos
@@ -388,18 +372,14 @@ async function placeBlockWithOptionsCompat (botState, referenceBlock, faceVector
     botState.swingArm(options.swingArm, options.showHand)
   }
 
-  return botState.placeBlock(position, faceVectorToBedrockFace(faceVector), {
+  return botState.placeBlock(position, blockFaceFromVector(faceVector, undefined), {
     ...options,
     lookOffset: placeLookOffset(faceVector, options)
   })
 }
 
-function radiansToDegrees (value) {
-  return (Number(value) || 0) * 180 / Math.PI
-}
-
 function mineflayerYawToBedrockDegrees (yaw) {
-  return radiansToDegrees(Math.PI - (Number(yaw) || 0))
+  return javaYawRadiansToBedrockDegrees(yaw)
 }
 
 function mineflayerDataVersion (botState) {

@@ -1,21 +1,10 @@
-const { logAction, sameRuntimeId } = require('../utils');
+const { logAction, nbtValue, sameRuntimeId } = require('../utils');
 const { Vec3 } = require('vec3');
 const buildIndexFromArray = require('prismarine-registry/lib/indexer');
 
-function plainNbtValue(value) {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    if ('type' in value && 'value' in value) return plainNbtValue(value.value);
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [key, plainNbtValue(child)])
-    );
-  }
-
-  return value;
-}
-
 function plainBlockStates(states = {}) {
   return Object.fromEntries(
-    Object.entries(states).map(([key, value]) => [key, plainNbtValue(value)])
+    Object.entries(states).map(([key, value]) => [key, nbtValue(value)])
   );
 }
 

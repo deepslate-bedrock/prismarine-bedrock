@@ -30,6 +30,8 @@ const {
   itemToRaw,
   logAction,
   maxStackSize,
+  parseItemStackResponsePacket,
+  responseInventorySlots,
   selfRuntimeEntityId,
   sameItem,
   stackRequestSlotInfo
@@ -175,27 +177,8 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     })
   }
 
-  function parseItemStackResponsePacket (packet) {
-    return packet.responses || packet.response || packet.entries || []
-  }
-
-  function responseInventorySlots (response) {
-    const slots = new Map()
-
-    for (const container of response.containers || []) {
-      const containerId = container.slot_type?.container_id
-      if (containerId !== 'inventory' && containerId !== 'hotbar') continue
-
-      for (const slot of container.slots || []) {
-        slots.set(slot.slot, slot)
-      }
-    }
-
-    return slots
-  }
-
   function applyServerSlotInfo (response, changedSlots) {
-    const serverSlots = responseInventorySlots(response)
+    const serverSlots = responseInventorySlots(response, { containerIds: ['inventory', 'hotbar'] })
 
     for (const slot of changedSlots) {
       const serverSlot = serverSlots.get(slot)

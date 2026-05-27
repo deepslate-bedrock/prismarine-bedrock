@@ -42,46 +42,6 @@ describe('block runtime id mapping', function () {
     assert.strictEqual(getBlockRuntimeId(botState, new Vec3(1, 2, 3)), 1921718966)
   })
 
-  it('prefers exact server runtime IDs recorded for a block position', function () {
-    const pos = new Vec3(1, 2, 3)
-    const botState = {
-      blockRuntimeIdsByPosition: new Map([
-        ['1,2,3', -1041411415]
-      ]),
-      registry: {
-        blockNetworkRuntimeIdsByStateId: {
-          14388: -979936592
-        }
-      },
-      world: {
-        getBlock: () => ({ stateId: 14388, name: 'standing_sign' })
-      }
-    }
-
-    assert.strictEqual(getBlockRuntimeId(botState, pos), -1041411415)
-  })
-
-  it('drops exact runtime IDs after local manual state writes', function () {
-    const pos = new Vec3(1, 2, 3)
-    const botState = {
-      blockRuntimeIdsByPosition: new Map([
-        ['1,2,3', -1041411415]
-      ]),
-      registry: {
-        blockNetworkRuntimeIdsByStateId: {
-          14388: -979936592
-        }
-      },
-      world: {
-        getBlock: () => ({ stateId: 14388, name: 'standing_sign' })
-      }
-    }
-
-    botState.blockRuntimeIdsByPosition.delete('1,2,3')
-
-    assert.strictEqual(getBlockRuntimeId(botState, pos), -979936592)
-  })
-
   it('reads outbound block runtime IDs from the synchronous world mirror', function () {
     const botState = {
       registry: {

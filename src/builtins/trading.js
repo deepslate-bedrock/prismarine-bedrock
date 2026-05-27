@@ -27,6 +27,7 @@ const {
   itemId,
   itemStackId,
   logAction,
+  maxStackSize,
   nbtValue,
   normalizeItemId,
   playerInventorySlotInfo,
@@ -425,7 +426,7 @@ module.exports = function tradingPlugin (botState, options = {}) {
     if (shortName && expectedCount > 0) {
       for (let slot = 0; slot < slots.length; slot++) {
         const item = slots[slot]
-        const max = item?.stackSize || item?.maxStackSize || 64
+        const max = maxStackSize(item)
         if (item?.name === shortName && item.count + expectedCount <= max) return slot
       }
     }

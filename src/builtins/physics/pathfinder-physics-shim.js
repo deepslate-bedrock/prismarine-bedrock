@@ -16,16 +16,13 @@
 
 const { Vec3 } = require('vec3')
 const { createBedrockPhysicsEngine } = require('./bedrock-physics-engine')
-
-function radiansToDegrees (rad) {
-  return (Number(rad) || 0) * 180 / Math.PI
-}
+const { javaYawRadiansToBedrockDegrees, radiansToDegrees } = require('../../utils')
 
 // Pathfinder's yaw follows the Java atan2(-dx,-dz) convention (south=0).
 // Bedrock degrees count clockwise from south too, but offset by π. The
 // existing mineflayer-compat.look() uses the same conversion.
 function pathfinderYawToBedrockDegrees (rad) {
-  return radiansToDegrees(Math.PI - (Number(rad) || 0))
+  return javaYawRadiansToBedrockDegrees(rad)
 }
 
 function makeSyntheticSelf (state, C, liveSelf) {

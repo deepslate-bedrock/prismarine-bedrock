@@ -323,7 +323,6 @@ describe('world runtime mapping routes', function () {
         await waitImmediate()
 
         await assertBlockAt(botState, pos, 'air')
-        assert.strictEqual(botState.blockRuntimeIdsByPosition.get('1,64,1'), runtimeId)
       })
 
       it('applies update_block_synced through the runtime registry map', async function () {

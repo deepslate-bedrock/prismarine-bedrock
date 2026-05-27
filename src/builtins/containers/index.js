@@ -4,10 +4,13 @@
 
 const { Vec3 } = require('vec3')
 const {
+  blockFaceFromEye,
   clickPositionForFace,
   getBlockRuntimeId,
-  itemToRaw,
+  itemToRawWithoutStackId,
   logAction,
+  lookPositionForFace,
+  positionForFace,
   raycastBlock,
   sleep,
   toVec3f
@@ -19,62 +22,9 @@ const {
 } = require('../../container-metadata')
 const specializeContainer = require('./specialize')
 
-function blockFace (botState, pos) {
-  const eye = botState.self.position
-  const center = {
-    x: Math.floor(pos.x) + 0.5,
-    y: Math.floor(pos.y) + 0.5,
-    z: Math.floor(pos.z) + 0.5
-  }
-  const dx = eye.x - center.x
-  const dy = eye.y - center.y
-  const dz = eye.z - center.z
-  const horizontalDistance = Math.hypot(dx, dz)
-
-  if (horizontalDistance < 0.25 && Math.abs(dy) >= 0.25) return dy > 0 ? 1 : 0
-  if (Math.abs(dx) >= Math.abs(dz)) return dx > 0 ? 5 : 4
-  return dz > 0 ? 3 : 2
-}
-
-function resultPositionForFace (pos, face) {
-  const target = pos instanceof Vec3 ? pos : new Vec3(pos.x, pos.y, pos.z)
-  switch (face) {
-    case 0: return target.offset(0, -1, 0)
-    case 1: return target.offset(0, 1, 0)
-    case 2: return target.offset(0, 0, -1)
-    case 3: return target.offset(0, 0, 1)
-    case 4: return target.offset(-1, 0, 0)
-    case 5: return target.offset(1, 0, 0)
-    default: return target
-  }
-}
-
-function lookPositionForFace (pos, face) {
-  const target = pos instanceof Vec3 ? pos : new Vec3(pos.x, pos.y, pos.z)
-  switch (face) {
-    case 0: return target.offset(0.5, 0, 0.5)
-    case 1: return target.offset(0.5, 1, 0.5)
-    case 2: return target.offset(0.5, 0.5, 0)
-    case 3: return target.offset(0.5, 0.5, 1)
-    case 4: return target.offset(0, 0.5, 0.5)
-    case 5: return target.offset(1, 0.5, 0.5)
-    default: return target.offset(0.5, 0.5, 0.5)
-  }
-}
-
 function lookPositionForClick (pos, clickPos) {
   const target = pos instanceof Vec3 ? pos : new Vec3(pos.x, pos.y, pos.z)
   return target.offset(clickPos.x, clickPos.y, clickPos.z)
-}
-
-function openHeldItemRaw (item, itemClass) {
-  const raw = { ...itemToRaw(item, itemClass) }
-  delete raw.stack_id
-  delete raw.stackId
-  delete raw.stack_network_id
-  delete raw.network_stack_id
-  raw.has_stack_id = 0
-  return raw
 }
 
 function blockAt (botState, target) {
@@ -170,7 +120,7 @@ module.exports = function containersPlugin (botState, options = {}) {
 
   function sendOpenBlockContainer (pos, face, opts = {}) {
     const target = pos instanceof Vec3 ? pos : new Vec3(pos.x, pos.y, pos.z)
-    const resultPosition = resultPositionForFace(target, face)
+    const resultPosition = Number.isInteger(face) ? positionForFace(target, face) : target
     const heldSlot = botState.heldItemSlot ?? 0
     const heldItem = botState.inventory?.slots?.[heldSlot] ?? null
     const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition
@@ -205,7 +155,7 @@ module.exports = function containersPlugin (botState, options = {}) {
           block_position: { x: target.x, y: target.y, z: target.z },
           face,
           hotbar_slot: heldSlot,
-          held_item: openHeldItemRaw(heldItem, botState.itemClass),
+          held_item: itemToRawWithoutStackId(heldItem, botState.itemClass, { hasStackId: 'always' }),
           player_pos: toVec3f(playerPos),
           click_pos: clickPos,
           block_runtime_id: getBlockRuntimeId(botState, target, {
@@ -278,7 +228,7 @@ module.exports = function containersPlugin (botState, options = {}) {
   async function openContainer (pos, opts = {}) {
     const target = pos instanceof Vec3 ? pos : new Vec3(pos.x, pos.y, pos.z)
     let face = opts.face
-    const initialFace = face ?? blockFace(botState, target)
+    const initialFace = face ?? blockFaceFromEye(botState.self.position, target, { verticalMode: 'centered' })
     const openPromise = waitForContainerOpen(packet => {
       if (!opts.type) return true
       return packet.window_type === opts.type

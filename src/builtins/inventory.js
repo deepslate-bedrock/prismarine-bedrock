@@ -19,6 +19,7 @@ const {
   itemStackResponseStatusOk,
   logAction,
   rawStackId,
+  responseInventorySlots,
   sameRuntimeId,
   selfRuntimeEntityId
 } = require('../utils')
@@ -252,21 +253,6 @@ function inject (botState, options = {}) {
 
     logAction('[inventory]', 'ui_content', { slots: slots.length })
     botState.emit('ui_content_updated', uiSlots, packet)
-  }
-
-  function responseInventorySlots (response) {
-    const slots = new Map()
-
-    for (const container of response?.containers || []) {
-      const containerId = container.slot_type?.container_id
-      if (containerId !== 'hotbar' && containerId !== 'inventory' && containerId !== 'hotbar_and_inventory') continue
-
-      for (const slot of container.slots || []) {
-        slots.set(slot.slot, slot)
-      }
-    }
-
-    return slots
   }
 
   function applyItemStackResponseToInventory (response) {

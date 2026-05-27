@@ -19,6 +19,13 @@ const {
   applyAttributes,
   ensureEntityState
 } = require('../../entity-metadata');
+const {
+  degreesToRadians,
+  normalizePhysicsGameMode,
+  normalizePhysicsPose,
+  safeJson,
+  toBigIntSafe
+} = require('../../utils');
 
 const {
   BotcraftPhysics,
@@ -53,23 +60,11 @@ function createLogger(options = {}) {
       console.log(prefix, event);
       return;
     }
-    console.log(prefix, event, safeJson(data));
+    console.log(prefix, event, safeJson(data, data, 2));
   };
 }
 
 function noop() {}
-
-function safeJson(value) {
-  try {
-    return JSON.stringify(
-      value,
-      (_key, v) => (typeof v === 'bigint' ? v.toString() : v),
-      2
-    );
-  } catch {
-    return value;
-  }
-}
 
 function stringifyBigInt(value) {
   if (typeof value === 'bigint') return value.toString();
@@ -93,15 +88,6 @@ function debugNxgState(phase, data) {
   console.log('[nxg-state]', phase, JSON.stringify(data, (_key, value) =>
     typeof value === 'bigint' ? value.toString() : value
   ));
-}
-
-function toBigIntSafe(value) {
-  try {
-    if (value === undefined || value === null) return null;
-    return typeof value === 'bigint' ? value : BigInt(value);
-  } catch {
-    return null;
-  }
 }
 
 // ===================================================================
@@ -228,36 +214,13 @@ function ensureAttributeShape(attributes) {
 // ===================================================================
 // Normalize game mode string
 // ===================================================================
-function normalizeGameMode(gamemode) {
-  if (gamemode === 'creative' || gamemode === 1) return 'creative';
-  if (gamemode === 'adventure' || gamemode === 2) return 'adventure';
-  if (gamemode === 'spectator' || gamemode === 3 || gamemode === 6) return 'spectator';
-  return 'survival';
-}
+const normalizeGameMode = normalizePhysicsGameMode;
 
 // ===================================================================
 // Normalize pose
 // ===================================================================
 function normalizePose(pose) {
-  if (!pose) return PlayerPoses.STANDING;
-  if (typeof pose === 'number') return PlayerPoses[pose] ? pose : PlayerPoses.STANDING;
-  if (typeof pose === 'string') {
-    switch (pose.toLowerCase()) {
-      case 'standing': return PlayerPoses.STANDING;
-      case 'sneaking':
-      case 'crouching': return PlayerPoses.SNEAKING || PlayerPoses.CROUCHING || 1;
-      case 'swimming': return PlayerPoses.SWIMMING || 2;
-      case 'fall_flying':
-      case 'fallflying': return PlayerPoses.FALL_FLYING || 3;
-      case 'sleeping': return PlayerPoses.SLEEPING || 0;
-      default: return PlayerPoses.STANDING;
-    }
-  }
-  return PlayerPoses.STANDING;
-}
-
-function degreesToRadians(value) {
-  return (Number(value) || 0) * Math.PI / 180;
+  return normalizePhysicsPose(pose, PlayerPoses);
 }
 
 function bedrockYawToNxgYaw(yawDegrees) {

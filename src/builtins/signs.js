@@ -1,10 +1,14 @@
 const { Vec3 } = require('vec3')
 const {
   getBlockRuntimeId,
-  itemToRaw,
+  blockFaceFromEye,
+  isSignBlockName,
+  itemToRawWithoutStackId,
   nbtValue,
   normalizeBlockPos,
+  positionForFace,
   raycastBlock,
+  sameBlockPos,
   signShapeOverride,
   sleep,
   toVec3f
@@ -22,16 +26,6 @@ function cloneNbt (value) {
   const out = {}
   for (const [key, child] of Object.entries(value)) out[key] = cloneNbt(child)
   return out
-}
-
-function isSignBlockName (name) {
-  if (!name) return false
-  const normalized = String(name).replace(/^minecraft:/, '')
-  return normalized === 'standing_sign' ||
-    normalized === 'wall_sign' ||
-    normalized.endsWith('_standing_sign') ||
-    normalized.endsWith('_wall_sign') ||
-    normalized.endsWith('_hanging_sign')
 }
 
 function signEntityIdForBlock (blockName) {
@@ -159,22 +153,6 @@ function assertSignBlock (block, pos) {
   if (!isSignBlockName(block.name)) throw new Error(`Block at ${pos} is not a sign: ${block.name}`)
 }
 
-function samePos (a, b) {
-  return a && b && a.x === b.x && a.y === b.y && a.z === b.z
-}
-
-function resultPositionForFace (pos, face) {
-  switch (face) {
-    case 0: return pos.offset(0, -1, 0)
-    case 1: return pos.offset(0, 1, 0)
-    case 2: return pos.offset(0, 0, -1)
-    case 3: return pos.offset(0, 0, 1)
-    case 4: return pos.offset(-1, 0, 0)
-    case 5: return pos.offset(1, 0, 0)
-    default: return pos.clone()
-  }
-}
-
 function signClickPositionForFace (face) {
   switch (face) {
     case 0: return { x: 0.5, y: 0.25, z: 0.5 }
@@ -185,40 +163,6 @@ function signClickPositionForFace (face) {
     case 5: return { x: 0.75, y: 0.75, z: 0.5 }
     default: return { x: 0.5, y: 0.75, z: 0.5 }
   }
-}
-
-function blockFace (botState, pos) {
-  const eye = botState.self?.position
-  if (!eye) return 3
-
-  const center = {
-    x: Math.floor(pos.x) + 0.5,
-    y: Math.floor(pos.y) + 0.5,
-    z: Math.floor(pos.z) + 0.5
-  }
-  const dx = eye.x - center.x
-  const dy = eye.y - center.y
-  const dz = eye.z - center.z
-  const horizontalDistance = Math.hypot(dx, dz)
-
-  if (horizontalDistance < 0.25 && Math.abs(dy) >= 0.25) return dy > 0 ? 1 : 0
-  if (Math.abs(dx) >= Math.abs(dz)) return dx > 0 ? 5 : 4
-  return dz > 0 ? 3 : 2
-}
-
-function openHeldItemRaw (botState) {
-  const heldSlot = botState.heldItemSlot ?? 0
-  const raw = { ...itemToRaw(botState.inventory?.slots?.[heldSlot] ?? null, botState.itemClass) }
-  const hadStackId = raw.stack_id != null ||
-    raw.stackId != null ||
-    raw.stack_network_id != null ||
-    raw.network_stack_id != null
-  delete raw.stack_id
-  delete raw.stackId
-  delete raw.stack_network_id
-  delete raw.network_stack_id
-  if (hadStackId) raw.has_stack_id = 0
-  return { heldSlot, raw }
 }
 
 async function blockAt (botState, pos) {
@@ -274,7 +218,7 @@ module.exports = (botState) => {
       }
 
       function onOpenSign (packet) {
-        if (!samePos(packet.position, pos)) return
+        if (!sameBlockPos(packet.position, pos)) return
         cleanup()
         resolve(packet)
       }
@@ -285,16 +229,20 @@ module.exports = (botState) => {
 
   async function openSignEditor (pos, options = {}) {
     pos = normalizeBlockPos(pos)
-    if (currentOpenSign && samePos(currentOpenSign.position, pos) && options.reopen !== true) {
+    if (currentOpenSign && sameBlockPos(currentOpenSign.position, pos) && options.reopen !== true) {
       return currentOpenSign.packet
     }
-    if (currentOpenSign && !samePos(currentOpenSign.position, pos)) {
+    if (currentOpenSign && !sameBlockPos(currentOpenSign.position, pos)) {
       throw new Error(`Sign editor already open at ${currentOpenSign.position}`)
     }
 
     const block = options.block ?? await blockAt(botState, pos)
-    const initialFace = options.face ?? blockFace(botState, pos)
-    const held = openHeldItemRaw(botState)
+    const initialFace = options.face ?? blockFaceFromEye(botState.self?.position, pos, { verticalMode: 'centered', fallback: 3 })
+    const heldSlot = botState.heldItemSlot ?? 0
+    const held = {
+      heldSlot,
+      raw: itemToRawWithoutStackId(botState.inventory?.slots?.[heldSlot] ?? null, botState.itemClass)
+    }
     const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition ?? pos
     const runtimeEntityId = client.entityId ?? botState.self?.runtimeId ?? 0n
 
@@ -305,7 +253,7 @@ module.exports = (botState) => {
 
     const rayHit = raycastSignBlock(botState, pos, block, options)
     const face = options.face ?? rayHit?.face ?? initialFace
-    const resultPosition = resultPositionForFace(pos, face)
+    const resultPosition = positionForFace(pos, face)
     const clickPosition = options.clickPosition ?? (options.face == null && rayHit?.face === face ? rayHit.clickPosition : null) ?? signClickPositionForFace(face)
     const openSign = waitForOpenSign(pos, options.openTimeoutMs ?? 5000)
 
@@ -360,7 +308,7 @@ module.exports = (botState) => {
 
   function assertOpenSignEditor (pos) {
     if (!currentOpenSign) throw new Error(`Sign editor is not open at ${pos}`)
-    if (!samePos(currentOpenSign.position, pos)) {
+    if (!sameBlockPos(currentOpenSign.position, pos)) {
       throw new Error(`Sign editor is open at ${currentOpenSign.position}, not ${pos}`)
     }
     return currentOpenSign
@@ -374,7 +322,7 @@ module.exports = (botState) => {
     }
 
     const pos = posLike == null ? state.position : normalizeBlockPos(posLike)
-    if (!samePos(state.position, pos)) {
+    if (!sameBlockPos(state.position, pos)) {
       throw new Error(`Sign editor is open at ${state.position}, not ${pos}`)
     }
 
@@ -431,7 +379,7 @@ module.exports = (botState) => {
     }
 
     let resolvedUpdates = updates
-    let opened = currentOpenSign && samePos(currentOpenSign.position, pos)
+    let opened = currentOpenSign && sameBlockPos(currentOpenSign.position, pos)
       ? currentOpenSign.packet
       : null
 

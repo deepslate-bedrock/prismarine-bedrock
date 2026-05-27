@@ -4,7 +4,7 @@
 const { buildStatic } = require('mineflayer-crafting-util')
 const recipeLoader = require('prismarine-recipe')
 const registryLoader = require('prismarine-registry')
-const { logAction, sleep } = require('../utils')
+const { itemStackId, logAction, responseSlot, responseStackId, sleep } = require('../utils')
 
 const CONTAINER = {
   output: 'creative_output',
@@ -201,24 +201,6 @@ function nextCraftStackId (botState) {
   let stackId = 0
   while (stackId <= maxInventoryStackId) stackId = botState.itemClass.nextStackId()
   return stackId
-}
-
-function itemStackId (item) {
-  return item?.stackId ?? item?.stack_id ?? 0
-}
-
-function responseSlot (response, containerId, slot) {
-  for (const container of response?.containers || []) {
-    if (container.slot_type?.container_id !== containerId) continue
-    const found = (container.slots || []).find(entry => entry.slot === slot)
-    if (found) return found
-  }
-
-  return null
-}
-
-function responseStackId (response, containerId, slot, fallback = 0) {
-  return responseSlot(response, containerId, slot)?.item_stack_id ?? fallback
 }
 
 function craftingGridProtocolSlot (craft, gridSlot) {

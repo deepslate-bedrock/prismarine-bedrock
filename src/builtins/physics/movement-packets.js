@@ -1,5 +1,5 @@
 const { Vec3 } = require('vec3')
-const { deltaDeg, logAction, normalizeInputData, numberOrZero } = require('../../utils')
+const { degreesToRadians, deltaDeg, logAction, normalizeInputData, numberOrZero } = require('../../utils')
 const { toFeetPosition } = require('./position')
 
 const INPUT_FLAG_NAME_BY_CONSTANT = {
@@ -48,10 +48,6 @@ function inputFlagByBit (C) {
       .filter(([constant]) => C[constant] != null)
       .map(([constant, name]) => [String(C[constant]), name])
   )
-}
-
-function degreesToRadians (degrees) {
-  return (degrees * Math.PI) / 180
 }
 
 function wrapDegrees (degrees) {

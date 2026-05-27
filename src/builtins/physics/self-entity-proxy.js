@@ -1,33 +1,15 @@
 const { Vec3 } = require('vec3');
 const { ControlStateHandler, PlayerPoses, convInpToAxes } = require('@nxg-org/mineflayer-physics-util');
+const { normalizePhysicsGameMode, normalizePhysicsPose } = require('../../utils');
 
 // ################################################################################
 // Helper functions (same as in the full adapter)
 // ################################################################################
 
-function normalizeGameMode(gamemode) {
-  if (gamemode === 'creative' || gamemode === 1) return 'creative';
-  if (gamemode === 'adventure' || gamemode === 2) return 'adventure';
-  if (gamemode === 'spectator' || gamemode === 3 || gamemode === 6) return 'spectator';
-  return 'survival';
-}
+const normalizeGameMode = normalizePhysicsGameMode;
 
 function normalizePose(pose) {
-  if (!pose) return PlayerPoses.STANDING;
-  if (typeof pose === 'number') return PlayerPoses[pose] ? pose : PlayerPoses.STANDING;
-  if (typeof pose === 'string') {
-    switch (pose.toLowerCase()) {
-      case 'standing': return PlayerPoses.STANDING;
-      case 'sneaking':
-      case 'crouching': return PlayerPoses.SNEAKING || PlayerPoses.CROUCHING || 1;
-      case 'swimming': return PlayerPoses.SWIMMING || 2;
-      case 'fall_flying':
-      case 'fallflying': return PlayerPoses.FALL_FLYING || 3;
-      case 'sleeping': return PlayerPoses.SLEEPING || 0;
-      default: return PlayerPoses.STANDING;
-    }
-  }
-  return PlayerPoses.STANDING;
+  return normalizePhysicsPose(pose, PlayerPoses);
 }
 
 // Map Bedrock attribute names to full names used by the engine

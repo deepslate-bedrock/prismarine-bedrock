@@ -11,10 +11,13 @@
 
 const Vec3 = require('vec3').Vec3
 const {
+  blockFaceFromEye,
   clickPositionForFace,
   getBlockRuntimeId: getRuntimeIdAt,
   itemToRaw: toRawItem,
   logAction,
+  positionForFace,
+  sameBlockPos,
   toVec3f
 } = require('../utils')
 
@@ -24,22 +27,6 @@ const {
  */
 function inject (botState, options) {
   const client = botState.client
-
-  function placedPositionForFace (targetPos, face) {
-    switch (face) {
-      case 0: return targetPos.offset(0, -1, 0)
-      case 1: return targetPos.offset(0, 1, 0)
-      case 2: return targetPos.offset(0, 0, -1)
-      case 3: return targetPos.offset(0, 0, 1)
-      case 4: return targetPos.offset(-1, 0, 0)
-      case 5: return targetPos.offset(1, 0, 0)
-      default: return targetPos.clone()
-    }
-  }
-
-  function samePos (a, b) {
-    return a && b && a.x === b.x && a.y === b.y && a.z === b.z
-  }
 
   function waitForPlacedBlockUpdate (position, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -62,35 +49,19 @@ function inject (botState, options) {
       }
 
       const onUpdateBlock = packet => {
-        if (samePos(packet.position, position)) finish()
+        if (sameBlockPos(packet.position, position)) finish()
       }
       const onUpdateBlockSynced = packet => {
-        if (samePos(packet.position, position)) finish()
+        if (sameBlockPos(packet.position, position)) finish()
       }
       const onUpdateSubchunkBlocks = packet => {
-        if ((packet.blocks || []).some(entry => samePos(entry.position, position))) finish()
+        if ((packet.blocks || []).some(entry => sameBlockPos(entry.position, position))) finish()
       }
 
       client.on('update_block', onUpdateBlock)
       client.on('update_block_synced', onUpdateBlockSynced)
       client.on('update_subchunk_blocks', onUpdateSubchunkBlocks)
     })
-  }
-
-  function blockFace (pos) {
-    const eye = botState.self.position
-    const center = {
-      x: Math.floor(pos.x) + 0.5,
-      y: Math.floor(pos.y) + 0.5,
-      z: Math.floor(pos.z) + 0.5
-    }
-    const dx = eye.x - center.x
-    const dy = eye.y - center.y
-    const dz = eye.z - center.z
-
-    if (Math.abs(dy) >= Math.abs(dx) && Math.abs(dy) >= Math.abs(dz)) return dy > 0 ? 1 : 0
-    if (Math.abs(dx) >= Math.abs(dz)) return dx > 0 ? 5 : 4
-    return dz > 0 ? 3 : 2
   }
 
   // ------------------------------------------------------------------
@@ -123,7 +94,7 @@ function inject (botState, options) {
     if (!(targetPos instanceof Vec3)) {
       throw new TypeError('placeBlock: targetPos must be a Vec3')
     }
-    face ??= blockFace(targetPos)
+    face ??= blockFaceFromEye(botState.self.position, targetPos)
 
     if (placeOptions.offhand) {
       throw new Error('Bedrock placeBlock does not support offhand placement yet')
@@ -164,7 +135,7 @@ function inject (botState, options) {
 
     if (placeOptions.waitForUpdate !== false) {
       const timeoutMs = Number(placeOptions.placeCompletionTimeoutMs ?? options.placeCompletionTimeoutMs ?? botState.options?.placeCompletionTimeoutMs ?? 5000)
-      await waitForPlacedBlockUpdate(placedPositionForFace(targetPos, face), timeoutMs)
+      await waitForPlacedBlockUpdate(positionForFace(targetPos, face), timeoutMs)
     }
   }
 
