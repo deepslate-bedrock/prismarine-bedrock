@@ -16,6 +16,25 @@ remain visible where they matter.
 | `packet-level` | Thin helper over Bedrock packets. Callers must understand packet semantics. |
 | `internal` | Agent/debug/helper surface. It exists today but should not be treated as stable public API. |
 
+## Built-in Reference Sheets
+
+This page is the compact API map. Subsystem sheets provide the scoreboard-style
+detail for individual built-ins and related built-in groups:
+
+| Built-in area | Reference sheet |
+| --- | --- |
+| Chat and commands | [`chat-and-commands.md`](reference/chat-and-commands.md) |
+| Auth input, controls, and movement | [`auth-input-and-movement.md`](reference/auth-input-and-movement.md) |
+| World, chunks, entities, and players | [`world-and-entities.md`](reference/world-and-entities.md) |
+| Inventory and item stack requests | [`inventory-and-actions.md`](reference/inventory-and-actions.md) |
+| Containers | [`containers.md`](reference/containers.md) |
+| Crafting | [`crafting.md`](reference/crafting.md) |
+| Digging, placement, and entity interaction | [`digging-placement-and-interaction.md`](reference/digging-placement-and-interaction.md) |
+| Emotes, food, flight, and environment | [`emotes-food-flight-environment.md`](reference/emotes-food-flight-environment.md) |
+| Scoreboards | [`scoreboards.md`](reference/scoreboards.md) |
+| Trading | [`trading.md`](reference/trading.md) |
+| Mineflayer compatibility facade | [`mineflayer-compat-facade.md`](reference/mineflayer-compat-facade.md) |
+
 ## Creating A Bot
 
 ```js
@@ -126,6 +145,9 @@ login/spawn.
 
 ## Chat
 
+See [`docs/reference/chat-and-commands.md`](reference/chat-and-commands.md) for
+packet paths, events, and examples.
+
 ### `bot.chat(message)` `stable`
 
 | Item | Details |
@@ -157,6 +179,9 @@ bot.on('chat', msg => {
 
 ## Commands
 
+See [`docs/reference/chat-and-commands.md`](reference/chat-and-commands.md) for
+command packet behavior, output waiters, and events.
+
 | API | Maturity | Signature | Returns | Side effects, preconditions, failures |
 | --- | --- | --- | --- | --- |
 | `bot.command` | `stable` | `command(value, opts = {})` | request id string | Sends `command_request`, `settings_command`, or writes a server command file depending on `opts.packet`/configured packet. Prefixes `/` if missing. |
@@ -174,6 +199,9 @@ console.log(output.lines.join('\n'))
 ```
 
 ## Auth Input And Controls
+
+See [`docs/reference/auth-input-and-movement.md`](reference/auth-input-and-movement.md)
+for auth-input hooks, control state, movement, look, and physics tick events.
 
 ### Packet edit hooks `packet-level`
 
@@ -216,6 +244,9 @@ Java yaw orientation for compat callers.
 
 ## World And Chunks
 
+See [`docs/reference/world-and-entities.md`](reference/world-and-entities.md) for
+world mirror state, chunk readiness, entity stores, helpers, and events.
+
 | API | Maturity | Signature | Returns | Side effects, preconditions, failures |
 | --- | --- | --- | --- | --- |
 | `bot.resetWorld` | `partial` | `resetWorld()` | `undefined` | Replaces `bot.world` with a fresh Prismarine world. |
@@ -232,6 +263,9 @@ console.log(block?.name)
 ```
 
 ## Entities And Players
+
+See [`docs/reference/world-and-entities.md`](reference/world-and-entities.md) for
+world mirror state, chunk readiness, entity stores, helpers, and events.
 
 ### Entity stores
 
@@ -264,6 +298,9 @@ Events emitted by entity/player built-ins are listed in the event table below.
 
 ## Inventory
 
+See [`docs/reference/inventory-and-actions.md`](reference/inventory-and-actions.md)
+for inventory mirror shape, stack request helpers, common actions, and events.
+
 | API | Maturity | Signature | Returns | Side effects, preconditions, failures |
 | --- | --- | --- | --- | --- |
 | `bot.getWindow` | `getWindow(windowId = 0)` | window or `null` | Reads `bot.windows`. |
@@ -279,6 +316,9 @@ console.log(stick?.count ?? 0)
 ```
 
 ## Inventory Actions
+
+See [`docs/reference/inventory-and-actions.md`](reference/inventory-and-actions.md)
+for inventory mirror shape, stack request helpers, common actions, and events.
 
 These helpers send Bedrock `item_stack_request` actions. They rely on stack ids,
 server responses, and inventory mirror updates.
@@ -310,6 +350,9 @@ await bot.dropOneInventoryItem(bot.heldItemSlot)
 ```
 
 ## Containers
+
+See [`docs/reference/containers.md`](reference/containers.md) for opening
+containers, the base wrapper API, specialized helpers, and container events.
 
 ### Opening and tracking containers
 
@@ -380,6 +423,9 @@ chest.close()
 
 ## Crafting
 
+See [`docs/reference/crafting.md`](reference/crafting.md) for planning state,
+execution paths, and crafting events.
+
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.craftingRecipeRegistry` | `partial` | property | registry | Registry used by recipe planner. |
@@ -412,6 +458,9 @@ await bot.craftItem(planks, 4)
 
 ## Digging And Placement
 
+See [`docs/reference/digging-placement-and-interaction.md`](reference/digging-placement-and-interaction.md)
+for digging, placement, entity interaction, and action events.
+
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.dig` | `stable` | `async dig(block, forceLook = true, digFace = 'auto')` | resolves when block update completes | Looks at target, hooks auth-input block actions, waits for update. Throws for null, already digging, non-diggable, or infinite dig time. |
@@ -428,6 +477,9 @@ if (bot.canDigBlock(target)) await bot.dig(target)
 
 ## Entity Interaction
 
+See [`docs/reference/digging-placement-and-interaction.md`](reference/digging-placement-and-interaction.md)
+for digging, placement, entity interaction, and action events.
+
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.mouseOverEntity` | `packet-level` | `mouseOverEntity(entity, opts = {})` | interact packet | Queues `interact` with `mouse_over_entity`. Throws without runtime id. |
@@ -438,6 +490,9 @@ if (bot.canDigBlock(target)) await bot.dig(target)
 
 ## Emotes
 
+See [`docs/reference/emotes-food-flight-environment.md`](reference/emotes-food-flight-environment.md)
+for emote, food, flight, environment, and related event details.
+
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.emotes` | `partial` | property | state object | `{ equipped, byPlayerRuntimeId }`. |
@@ -447,6 +502,9 @@ if (bot.canDigBlock(target)) await bot.dig(target)
 
 ## Food And Eating
 
+See [`docs/reference/emotes-food-flight-environment.md`](reference/emotes-food-flight-environment.md)
+for emote, food, flight, environment, and related event details.
+
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.eat` | `partial` | `async eat(target?, eatOptions = {})` | completion result | Equips food if needed, starts use, optionally releases, waits for completion/inventory/attribute evidence, emits `ate`. Throws for active use, missing food, non-food, or full hunger unless forced. |
@@ -455,6 +513,9 @@ if (bot.canDigBlock(target)) await bot.dig(target)
 | `bot.usingHeldItem` | property | boolean | Set while an item use is active. |
 
 ## Flight
+
+See [`docs/reference/emotes-food-flight-environment.md`](reference/emotes-food-flight-environment.md)
+for emote, food, flight, environment, and related event details.
 
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
@@ -470,6 +531,9 @@ seen or rejects on timeout. Starting flight returns `false` if the bot lacks
 flight permission unless `force` is true.
 
 ## Environment
+
+See [`docs/reference/emotes-food-flight-environment.md`](reference/emotes-food-flight-environment.md)
+for emote, food, flight, environment, and related event details.
 
 | API | Maturity | Signature | Returns | Notes |
 | --- | --- | --- | --- | --- |
@@ -500,6 +564,9 @@ events, and examples.
 
 ## Trading
 
+See [`docs/reference/trading.md`](reference/trading.md) for trade window state,
+recipe lookup, execution, and events.
+
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
 | `bot.openTrade` / `bot.tradeWith` | `async openTrade(entity, opts?)` | trade window packet/container state | Interacts with villager-like entity and waits for trade window. |
@@ -517,6 +584,9 @@ some helper access available for agents because server responses can differ
 between native BDS and Geyser.
 
 ## Mineflayer Compatibility Facade
+
+See [`docs/reference/mineflayer-compat-facade.md`](reference/mineflayer-compat-facade.md)
+for facade plugin loading and supported compat properties.
 
 The native bot exposes Bedrock-first `Map` state. `bot.mineflayer` and
 `bot.asMineflayerBot()` return a `Proxy` facade for Mineflayer-shaped plugins.

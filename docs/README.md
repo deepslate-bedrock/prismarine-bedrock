@@ -24,6 +24,16 @@ const bot = createBot({
 
 - [API reference](API.md)
 - [Example plugin](https://github.com/deepslate-bedrock/bedrock-example-plugin)
+- [Chat and commands](reference/chat-and-commands.md)
+- [Auth input and movement](reference/auth-input-and-movement.md)
+- [World and entities](reference/world-and-entities.md)
+- [Inventory and actions](reference/inventory-and-actions.md)
+- [Containers](reference/containers.md)
+- [Crafting](reference/crafting.md)
+- [Digging, placement, and interaction](reference/digging-placement-and-interaction.md)
+- [Emotes, food, flight, and environment](reference/emotes-food-flight-environment.md)
+- [Trading](reference/trading.md)
+- [Mineflayer compatibility facade](reference/mineflayer-compat-facade.md)
 - [Mineflayer feature comparison](reference/mineflayer-feature-comparison.md)
 - [Scoreboard handling](reference/scoreboards.md)
 
