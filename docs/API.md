@@ -117,6 +117,7 @@ login/spawn.
 | `bot.playerState` | `partial` | `{ health, experience, experienceLevel, spawnPosition, spawnRotation }`. |
 | `bot.lifecycle` | `partial` | Respawn/death state including `isDead`, timers, and last respawn position. |
 | `bot.environment` | `partial` | Time/weather mirror. Use `getEnvironment()` for a copied snapshot. |
+| `bot.scoreboards` | `partial` | Bedrock scoreboard mirror with `objectives`, `displaySlots`, `scores`, and `identities` maps. |
 | `bot.chunkState` | `partial` | Chunk publisher center/radius and count state. |
 | `bot.protocolState` | `partial` | Protocol feature flags such as runtime id palette mode. |
 | `bot.creativeItems` | `partial` | Raw creative content entries after `creative_content`. |
@@ -478,6 +479,25 @@ flight permission unless `force` is true.
 Environment state fields include `time`, `timeOfDay`, `day`, `rainLevel`,
 `lightningLevel`, `raining`, `thundering`, and `lastWeatherEvent`.
 
+## Scoreboards
+
+| API | Maturity | Signature | Returns | Notes |
+| --- | --- | --- | --- | --- |
+| `bot.scoreboards` | `partial` | property | `ScoreboardMirror` | Mirrors server scoreboard packets and owns the read helpers. |
+| `bot.scoreboards.getObjective` | `getObjective(objectiveNameOrDisplaySlot)` | objective or `null` | Accepts an objective name or display slot such as `sidebar`. |
+| `bot.scoreboards.getEntry` | `getEntry(scoreboardId)` | score entry or `null` | Looks up a mirrored score by Bedrock scoreboard id. |
+| `bot.scoreboards.getScores` | `getScores(objectiveNameOrDisplaySlot = 'sidebar', options?)` | sorted score entries | Reads scores for any known objective or display slot. Supports `options.limit`. |
+| `bot.scoreboards.getScore` | `getScore(objectiveNameOrDisplaySlot, query)` | score entry or `null` | Finds one score by scoreboard id, display/custom name, or predicate. |
+| `bot.scoreboards.getDisplayedScores` | `getDisplayedScores(displaySlot = 'sidebar', options?)` | sorted score entries | Alias for display-slot score reads. |
+| `bot.getScoreboardObjective`, `bot.getScoreboardEntry`, `bot.getScoreboardScores`, `bot.getScoreboardScore`, `bot.getDisplayedScores` | `partial` | top-level aliases | same as mirror methods | Convenience aliases for callers that prefer bot-root methods. |
+
+The mirror listens to Bedrock `set_display_objective`, `set_score`,
+`remove_objective`, and `set_scoreboard_identity` packets. Servers only send
+scoreboard data that the client is allowed to know, typically displayed
+sidebar/player-list/below-name objectives and updates. See
+[`docs/reference/scoreboards.md`](reference/scoreboards.md) for state shape,
+events, and examples.
+
 ## Trading
 
 | API | Maturity | Signature | Returns | Side effects and failures |
@@ -581,6 +601,11 @@ events below are higher-level built-in events emitted by `bot`.
 | `ate` | `partial` | `{ slot, item, ...result }` | food |
 | `time` / `environmentTime` | `partial` | time payload | environment |
 | `weather` / `environmentWeather` | `partial` | weather payload | environment |
+| `scoreboardDisplay` | `partial` | `{ displaySlot, objective, rawPacket }` | scoreboard |
+| `scoreboardObjective` | `partial` | objective action payload | scoreboard |
+| `scoreboardObjectiveRemoved` | `partial` | `{ objective, rawPacket }` | scoreboard |
+| `scoreboardScore` | `partial` | `{ action, objective, entry, rawPacket }` | scoreboard |
+| `scoreboardIdentity` | `partial` | identity action payload | scoreboard |
 | `trade_window_open` | `partial` | packet, entity | trading |
 | `trade_window_update` | `partial` | packet, entity | trading |
 | `trade_window_close` | `partial` | packet | trading |
