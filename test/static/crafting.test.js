@@ -24,6 +24,13 @@ describe('crafting builtin', function () {
           _nextStackId: 8,
           nextStackId () {
             return this._nextStackId++
+          },
+          fromNotch (raw) {
+            return {
+              type: raw.network_id,
+              name: raw.network_id === 5 ? 'oak_planks' : 'unknown',
+              count: raw.count
+            }
           }
         },
         registry: {
@@ -139,6 +146,27 @@ describe('crafting builtin', function () {
     assert.strictEqual(normal[3].destination.slot, 1)
   })
 
+  it('applies accepted recipe-book auto craft output without waiting for inventory_slot', function () {
+    const { applyCraftResultResponseToInventory, buildAutoActions } = injectCrafting._craftingHelpers
+    const { botState, craft } = createCraftFixture()
+    botState.inventory.updateSlot = function (slot, item) {
+      this.slots[slot] = item
+    }
+
+    const actions = buildAutoActions(botState, craft)
+    applyCraftResultResponseToInventory(botState, actions, {
+      containers: [{
+        slot_type: { container_id: 'hotbar' },
+        slots: [{ slot: 1, count: 8, item_stack_id: 33 }]
+      }]
+    })
+
+    assert.strictEqual(botState.inventory.slots[1].name, 'oak_planks')
+    assert.strictEqual(botState.inventory.slots[1].count, 8)
+    assert.strictEqual(botState.inventory.slots[1].stackId, 33)
+  })
+
+
   it('keeps blank cells when mapping shaped table recipe grid slots', function () {
     const { buildGridPlaceActions } = injectCrafting._craftingHelpers
     const craft = {
@@ -170,5 +198,26 @@ describe('crafting builtin', function () {
     assert.strictEqual(normalizeCraftingPlanStatus({}), 'unknown')
     assert.strictEqual(isCompleteCraftingPlan({ status: 'complete' }), true)
     assert.strictEqual(isCompleteCraftingPlan({ status: 'partial_complete' }), false)
+  })
+
+  it('does not wait for a quiet period after inventory already changed', async function () {
+    const { waitForInventoryChange } = injectCrafting._craftingHelpers
+    const botState = {
+      inventory: {
+        slots: [{ name: 'oak_planks', type: 5, count: 8, stackId: 10 }]
+      },
+      on () {},
+      off () {},
+      client: {
+        on () {},
+        off () {}
+      }
+    }
+
+    const startedAt = Date.now()
+    const changed = await waitForInventoryChange(botState, '[]', 1000)
+
+    assert.strictEqual(changed, true)
+    assert(Date.now() - startedAt < 100, 'changed inventory should resolve immediately')
   })
 })

@@ -376,32 +376,32 @@ function inventorySignature (botState) {
   return JSON.stringify(inventoryDebugSummary(botState))
 }
 
-function waitForInventoryChange (botState, before, timeoutMs = 12000, quietMs = 3000) {
+function waitForInventoryChange (botState, before, timeoutMs = 12000) {
   return new Promise(resolve => {
-    let changed = inventorySignature(botState) !== before
-    let quietTimer = null
+    if (inventorySignature(botState) !== before) {
+      resolve(true)
+      return
+    }
 
     const done = (changed) => {
       clearTimeout(timer)
-      clearTimeout(quietTimer)
       botState.off('inventory_content_updated', onUpdate)
       botState.off('ui_slot_updated', onUpdate)
       botState.client?.off('inventory_slot', onUpdate)
+      botState.off('inventory_response_applied', onUpdate)
       resolve(changed)
     }
 
     const onUpdate = () => {
       if (inventorySignature(botState) === before) return
-      changed = true
-      clearTimeout(quietTimer)
-      quietTimer = setTimeout(() => done(true), quietMs)
+      done(true)
     }
 
     const timer = setTimeout(() => done(false), timeoutMs)
     botState.on('inventory_content_updated', onUpdate)
     botState.on('ui_slot_updated', onUpdate)
     botState.client?.on('inventory_slot', onUpdate)
-    if (changed) quietTimer = setTimeout(() => done(true), quietMs)
+    botState.on('inventory_response_applied', onUpdate)
   })
 }
 
@@ -725,9 +725,9 @@ function applyCraftResultResponseToInventory (botState, actions, response) {
   for (const action of actions) {
     const source = action.source
     if (
-      action.type_id !== ACTION.place ||
+      (action.type_id !== ACTION.place && action.type_id !== ACTION.take) ||
       source?.slot_type?.container_id !== CONTAINER.output ||
-      source.slot !== 50
+      (source.slot !== 50 && source.slot !== 0)
     ) continue
 
     const inventorySlot = inventorySlotForCraftDestination(action.destination)
@@ -935,6 +935,7 @@ async function injectCrafting (botState, options = {}) {
 
   async function executeNormalCraft (craft, useStandaloneRequest) {
     const gridStackIds = new Map()
+    const actionDelayMs = Math.max(0, Number(options.craftingActionDelayMs) || 0)
 
     for (const placement of craft.placements) {
       const takeResponse = await sendRequest(
@@ -947,7 +948,7 @@ async function injectCrafting (botState, options = {}) {
         throw new Error(`Normal craft did not receive a cursor stack id after taking from slot ${placement.slot}`)
       }
 
-      await sleep(50)
+      if (actionDelayMs > 0) await sleep(actionDelayMs)
 
       const gridProtocolSlot = craftingGridProtocolSlot(craft, placement.gridSlot)
       const placeResponse = await sendRequest(
@@ -963,7 +964,7 @@ async function injectCrafting (botState, options = {}) {
       )
       gridStackIds.set(placement.gridSlot, gridStackId)
 
-      await sleep(50)
+      if (actionDelayMs > 0) await sleep(actionDelayMs)
     }
 
     const beforeInventory = inventorySignature(botState)
@@ -1023,6 +1024,8 @@ module.exports._craftingHelpers = {
   buildActions,
   craftRequestSlotInfo,
   craftInventoryRequestSlotInfo,
+  applyCraftResultResponseToInventory,
+  waitForInventoryChange,
   normalizeCraftingPlanStatus,
   isCompleteCraftingPlan,
 }
