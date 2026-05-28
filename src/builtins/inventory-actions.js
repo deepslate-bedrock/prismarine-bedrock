@@ -31,28 +31,48 @@ const {
   logAction,
   maxStackSize,
   parseItemStackResponsePacket,
-  responseInventorySlots,
   selfRuntimeEntityId,
-  sameItem,
-  stackRequestSlotInfo
+  sameItem
 } = require('../utils')
+const {
+  InventorySimulationState,
+  cloneSlots,
+  cloneStack,
+  simulateStackRequest
+} = require('./inventory-simulation')
 
 module.exports = function inventoryActionsPlugin (botState, options = {}) {
   const client = botState.client
 
-  let nextRequestId = options.inventoryRequestIdStart ?? 1
+  let nextRequestId = options.inventoryRequestIdStart ?? -1001
   let responseTimeoutMs = options.inventoryResponseTimeoutMs ?? 5000
   let inventoryUpdateTimeoutMs = options.inventoryUpdateTimeoutMs ?? 3000
 
   const pendingResponses = new Map()
   const pendingSlotUpdates = new Set()
+  const pendingTransactions = new Map()
+
+  let predictedSlots = []
+  let predictedCursor = null
+  let virtualCursor = null
+  let activeBatch = null
+  const inventorySimulation = new InventorySimulationState(botState, { maxStackSize })
+  botState.inventorySimulation = inventorySimulation
 
   function requestId () {
-    return nextRequestId++
+    const id = nextRequestId
+    nextRequestId -= 2
+    return id
+  }
+
+  function actualItemAt (slot) {
+    return botState.inventory.slots[slot]
   }
 
   function itemAt (slot) {
-    return botState.inventory.slots[slot]
+    ensurePredictedSlots()
+    if (activeBatch) return activeBatch.predictedSlots[slot] ?? null
+    return predictedSlots[slot] ?? null
   }
 
   function assertInventorySlot (slot, name = 'slot') {
@@ -78,6 +98,313 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     return item
   }
 
+  function syncPredictedSlotsFromActual (force = false) {
+    if (!botState.inventory) return
+    if (!force && (pendingTransactions.size > 0 || activeBatch || virtualCursor)) return
+    inventorySimulation.syncFromBot(force)
+    predictedSlots = cloneSlots(botState.inventory.slots)
+    predictedCursor = cloneStack(inventorySimulation.cursor)
+    virtualCursor = null
+  }
+
+  function ensurePredictedSlots () {
+    if (!botState.inventory) return
+    if (predictedSlots.length !== botState.inventory.slots.length) {
+      syncPredictedSlotsFromActual(true)
+    }
+  }
+
+  function predictionSnapshot () {
+    ensurePredictedSlots()
+    inventorySimulation.slots = cloneSlots(predictedSlots)
+    inventorySimulation.cursor = cloneStack(predictedCursor)
+    return inventorySimulation.snapshot()
+  }
+
+  function cursorSnapshot () {
+    return cloneStack(predictedCursor)
+  }
+
+  function stackId (item) {
+    return item ? (item.stackId ?? item.stack_id ?? 0) : 0
+  }
+
+  function stackSlotInfo (containerId, slot, item = null) {
+    return {
+      slot_type: { container_id: containerId },
+      slot,
+      stack_id: stackId(item)
+    }
+  }
+
+  function cursorSlotInfo (item = predictedCursor) {
+    return stackSlotInfo('cursor', 0, item)
+  }
+
+  function playerProtocolSlot (slot) {
+    return isHotbarSlot(slot) ? slot : slot - 9
+  }
+
+  function playerSlotIndexForContainer (containerId, slot) {
+    if (containerId === 'inventory') return slot + 9
+    return slot
+  }
+
+  function playerStackRequestSlotInfo (slot, item, containerId = null) {
+    if (containerId) return stackSlotInfo(containerId, slot, item)
+    return stackSlotInfo(isHotbarSlot(slot) ? 'hotbar' : 'inventory', playerProtocolSlot(slot), item)
+  }
+
+  function currentPredictionState () {
+    ensurePredictedSlots()
+    return activeBatch
+      ? { slots: activeBatch.predictedSlots, cursor: activeBatch.predictedCursor }
+      : { slots: predictedSlots, cursor: predictedCursor }
+  }
+
+  function predictRequest (request) {
+    const base = currentPredictionState()
+    const prediction = simulateStackRequest(base, request, {
+      maxStackSize,
+      provisionalStackId: request.request_id
+    })
+
+    return {
+      ...prediction,
+      beforeSlots: cloneSlots(base.slots),
+      beforeCursor: cloneStack(base.cursor)
+    }
+  }
+
+  function publishPrediction (prediction) {
+    predictedSlots = cloneSlots(prediction.slots)
+    predictedCursor = cloneStack(prediction.cursor)
+    botState.emit('inventory_prediction_updated', {
+      slots: predictionSnapshot(),
+      cursor: cursorSnapshot(),
+      changedSlots: prediction.changedSlots,
+      cursorChanged: prediction.cursorChanged
+    })
+  }
+
+  function recordBatchedPrediction (request, prediction) {
+    const lastIndex = activeBatch.requests.length - 1
+    const lastRequest = activeBatch.requests[lastIndex]
+    const lastPrediction = activeBatch.predictions[lastIndex]
+    if (canCoalesceTakeRequests(lastRequest, request)) {
+      lastRequest.actions[0].count += request.actions[0].count
+      const mergedPrediction = {
+        ...prediction,
+        beforeSlots: cloneSlots(lastPrediction.beforeSlots),
+        beforeCursor: cloneStack(lastPrediction.beforeCursor),
+        changedSlots: [...new Set([...(lastPrediction.changedSlots || []), ...(prediction.changedSlots || [])])],
+        cursorChanged: lastPrediction.cursorChanged || prediction.cursorChanged
+      }
+      activeBatch.predictions[lastIndex] = mergedPrediction
+      for (const slot of mergedPrediction.changedSlots) activeBatch.touchedSlots.add(slot)
+      activeBatch.cursorTouched = activeBatch.cursorTouched || mergedPrediction.cursorChanged
+      activeBatch.predictedSlots = cloneSlots(mergedPrediction.slots)
+      activeBatch.predictedCursor = cloneStack(mergedPrediction.cursor)
+      publishPrediction(mergedPrediction)
+
+      return {
+        batched: true,
+        request: null,
+        actions: request.actions,
+        predicted: predictionSnapshot(),
+        cursor: cursorSnapshot()
+      }
+    }
+
+    activeBatch.requests.push(request)
+    activeBatch.predictions.push(prediction)
+    for (const slot of prediction.changedSlots) activeBatch.touchedSlots.add(slot)
+    activeBatch.cursorTouched = activeBatch.cursorTouched || prediction.cursorChanged
+    activeBatch.predictedSlots = cloneSlots(prediction.slots)
+    activeBatch.predictedCursor = cloneStack(prediction.cursor)
+    publishPrediction(prediction)
+
+    return {
+      batched: true,
+      request: null,
+      actions: request.actions,
+      predicted: predictionSnapshot(),
+      cursor: cursorSnapshot()
+    }
+  }
+
+  function canCoalesceTakeRequests (previous, next) {
+    if (!previous || !next) return false
+    if (previous.actions?.length !== 1 || next.actions?.length !== 1) return false
+    const first = previous.actions[0]
+    const second = next.actions[0]
+    if (first.type_id !== 'take' || second.type_id !== 'take') return false
+    if (!sameSlotInfo(first.source, second.source, true)) return false
+    if (!sameSlotInfo(first.destination, second.destination, false)) return false
+    return first.destination.stack_id === 0 && second.destination.stack_id === previous.request_id
+  }
+
+  function sameSlotInfo (a, b, compareStackId) {
+    if (!a || !b) return false
+    if (a.slot_type?.container_id !== b.slot_type?.container_id) return false
+    if (a.slot !== b.slot) return false
+    return !compareStackId || a.stack_id === b.stack_id
+  }
+
+  function cloneVirtualCursor (cursor) {
+    if (!cursor) return null
+    return {
+      sourceSlot: cursor.sourceSlot,
+      sourceItem: cloneStack(cursor.sourceItem),
+      item: cloneStack(cursor.item)
+    }
+  }
+
+  function currentVirtualCursor () {
+    return activeBatch ? activeBatch.virtualCursor : virtualCursor
+  }
+
+  function setCurrentVirtualCursor (cursor) {
+    if (activeBatch) activeBatch.virtualCursor = cloneVirtualCursor(cursor)
+    else virtualCursor = cloneVirtualCursor(cursor)
+  }
+
+  function responseContainers (response) {
+    return response?.containers || []
+  }
+
+  function isPlayerPredictionContainer (containerId) {
+    return containerId === 'inventory' || containerId === 'hotbar' || containerId === 'hotbar_and_inventory'
+  }
+
+  function responseSlotEntries (response) {
+    const entries = []
+    for (const container of responseContainers(response)) {
+      const containerId = container.slot_type?.container_id
+      for (const slot of container.slots || []) entries.push({ containerId, slot })
+    }
+    return entries
+  }
+
+  function responseCursorSlot (response) {
+    return responseSlotEntries(response).find(entry =>
+      entry.containerId === 'cursor' && entry.slot.slot === 0
+    )?.slot ?? null
+  }
+
+  function applyServerSlotToPredictedItem (predictedItem, serverSlot, fallbackItem = null) {
+    if (!serverSlot) return cloneStack(predictedItem)
+    if (serverSlot.count === 0) return null
+
+    const source = predictedItem || fallbackItem
+    if (!source) return null
+
+    return setStackId(cloneStack(source, serverSlot.count), serverSlot.item_stack_id)
+  }
+
+  function predictedCount (item) {
+    return item?.count ?? 0
+  }
+
+  function compareServerSlot (mismatches, label, expectedItem, serverSlot) {
+    const expectedCount = predictedCount(expectedItem)
+    if (expectedCount !== serverSlot.count) {
+      mismatches.push(`${label}: predicted ${expectedCount}, server ${serverSlot.count}`)
+    }
+  }
+
+  function predictionFailure (transaction, response, reason, mismatches = []) {
+    const error = new Error(`Inventory prediction failed for request ${transaction.request.request_id}: ${reason}`)
+    error.request = transaction.request
+    error.response = response
+    error.mismatches = mismatches
+    botState.emit('inventory_prediction_failed', {
+      error,
+      request: transaction.request,
+      response,
+      mismatches
+    })
+    return error
+  }
+
+  function applyPredictedSlotsToActual (slots) {
+    for (const slot of slots) {
+      botState.inventory.updateSlot(slot, cloneStack(predictedSlots[slot]))
+    }
+  }
+
+  function reconcileAcceptedPrediction (transaction, response) {
+    const finalSlots = cloneSlots(transaction.predictedSlots)
+    let finalCursor = cloneStack(transaction.predictedCursor)
+    const mismatches = []
+    const slotsToApply = new Set(transaction.touchedSlots)
+
+    for (const { containerId, slot: serverSlot } of responseSlotEntries(response)) {
+      if (containerId === 'cursor') {
+        if (serverSlot.slot !== 0) continue
+        compareServerSlot(mismatches, 'cursor', finalCursor, serverSlot)
+        finalCursor = applyServerSlotToPredictedItem(finalCursor, serverSlot, transaction.beforeCursor)
+        continue
+      }
+
+      if (!isPlayerPredictionContainer(containerId)) continue
+      const slot = playerSlotIndexForContainer(containerId, serverSlot.slot)
+      slotsToApply.add(slot)
+      compareServerSlot(mismatches, `slot ${slot}`, finalSlots[slot], serverSlot)
+      finalSlots[slot] = applyServerSlotToPredictedItem(finalSlots[slot], serverSlot, actualItemAt(slot) || transaction.beforeSlots[slot])
+    }
+
+    predictedSlots = finalSlots
+    if (transaction.cursorTouched || responseCursorSlot(response)) predictedCursor = finalCursor
+    virtualCursor = cloneVirtualCursor(transaction.predictedVirtualCursor)
+    applyPredictedSlotsToActual(slotsToApply)
+    pendingTransactions.delete(transaction.request.request_id)
+
+    botState.emit('inventory_prediction_reconciled', {
+      request: transaction.request,
+      response,
+      changedSlots: [...slotsToApply],
+      cursorChanged: transaction.cursorTouched || !!responseCursorSlot(response),
+      mismatches
+    })
+
+    if (mismatches.length > 0) throw predictionFailure(transaction, response, 'server state differed from prediction', mismatches)
+  }
+
+  function rollbackPrediction (transaction, response, cause) {
+    pendingTransactions.delete(transaction.request.request_id)
+    syncPredictedSlotsFromActual(true)
+    predictedCursor = cloneStack(transaction.beforeCursor)
+    virtualCursor = cloneVirtualCursor(transaction.beforeVirtualCursor)
+
+    const error = predictionFailure(
+      transaction,
+      response,
+      cause?.message || 'server rejected request',
+      cause?.mismatches || []
+    )
+    error.cause = cause
+    return error
+  }
+
+  function startPendingTransaction (request, prediction) {
+    const transaction = {
+      request,
+      beforeSlots: cloneSlots(prediction.beforeSlots),
+      beforeCursor: cloneStack(prediction.beforeCursor),
+      predictedSlots: cloneSlots(prediction.slots),
+      predictedCursor: cloneStack(prediction.cursor),
+      beforeVirtualCursor: cloneVirtualCursor(prediction.beforeVirtualCursor ?? currentVirtualCursor()),
+      predictedVirtualCursor: cloneVirtualCursor(prediction.virtualCursor ?? currentVirtualCursor()),
+      touchedSlots: new Set(prediction.changedSlots),
+      cursorTouched: prediction.cursorChanged
+    }
+
+    pendingTransactions.set(request.request_id, transaction)
+    publishPrediction(prediction)
+    return transaction
+  }
+
   function queueRequestInAuthInput (request) {
     botState.queuePlayerAuthInputEdit(packet => {
       botState.setAuthInputFlag(packet, 'item_stack_request', true)
@@ -88,15 +415,24 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   function sendItemStackRequest (request) {
-    queueRequestInAuthInput(request)
-    botState.emit('inventory_action_request', request)
+    return sendItemStackRequests([request])[0]
+  }
 
-    logAction('[inventory-actions]', 'item_stack_request', {
-      requestId: request.request_id,
-      actions: request.actions.map(action => action.type_id)
+  function sendItemStackRequests (requests) {
+    client.queue('item_stack_request', {
+      requests
     })
 
-    return request.request_id
+    for (const request of requests) {
+      botState.emit('inventory_action_request', request)
+
+      logAction('[inventory-actions]', 'item_stack_request', {
+        requestId: request.request_id,
+        actions: request.actions.map(action => action.type_id)
+      })
+    }
+
+    return requests.map(request => request.request_id)
   }
 
   function sendStandaloneItemStackRequest (request) {
@@ -177,80 +513,6 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     })
   }
 
-  function applyServerSlotInfo (response, changedSlots) {
-    const serverSlots = responseInventorySlots(response, { containerIds: ['inventory', 'hotbar'] })
-
-    for (const slot of changedSlots) {
-      const serverSlot = serverSlots.get(slot)
-      if (!serverSlot) continue
-
-      const item = botState.inventory.slots[slot]
-      if (!item || serverSlot.count === 0) {
-        botState.inventory.updateSlot(slot, null)
-        continue
-      }
-
-      const updated = setStackId(cloneItem(item, serverSlot.count), serverSlot.item_stack_id)
-      botState.inventory.updateSlot(slot, updated)
-    }
-  }
-
-  function applyConfirmedAction (action) {
-    if (action.type_id === 'swap') {
-      const sourceSlot = action.source.slot
-      const destinationSlot = action.destination.slot
-      const source = itemAt(sourceSlot)
-      const destination = itemAt(destinationSlot)
-
-      botState.inventory.updateSlot(sourceSlot, cloneItem(destination))
-      botState.inventory.updateSlot(destinationSlot, cloneItem(source))
-      return [sourceSlot, destinationSlot]
-    }
-
-    if (action.type_id === 'take' || action.type_id === 'place') {
-      const sourceSlot = action.source.slot
-      const destinationSlot = action.destination.slot
-      const source = itemAt(sourceSlot)
-      const destination = itemAt(destinationSlot)
-      const count = action.count
-
-      botState.inventory.updateSlot(sourceSlot, cloneItem(source, (source?.count || 0) - count))
-
-      if (destination) {
-        botState.inventory.updateSlot(destinationSlot, cloneItem(destination, destination.count + count))
-      } else {
-        botState.inventory.updateSlot(destinationSlot, cloneItem(source, count))
-      }
-
-      return [sourceSlot, destinationSlot]
-    }
-
-    if (action.type_id === 'drop' || action.type_id === 'destroy') {
-      const sourceSlot = action.source.slot
-      const source = itemAt(sourceSlot)
-      botState.inventory.updateSlot(sourceSlot, cloneItem(source, (source?.count || 0) - action.count))
-      return [sourceSlot]
-    }
-
-    return []
-  }
-
-  function applyConfirmedRequest (request, response, changedSlots) {
-    const appliedSlots = new Set()
-
-    for (const action of request.actions) {
-      for (const slot of applyConfirmedAction(action)) {
-        appliedSlots.add(slot)
-      }
-    }
-
-    for (const slot of changedSlots) {
-      appliedSlots.add(slot)
-    }
-
-    applyServerSlotInfo(response, appliedSlots)
-  }
-
   client.on('item_stack_response', packet => {
     const responses = parseItemStackResponsePacket(packet)
 
@@ -292,7 +554,9 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       } else if (itemStackResponseStatusOk(response)) {
         waiter.resolve(response)
       } else {
-        waiter.reject(new Error(`item_stack_response rejected request ${id}: ${response.status}`))
+        const error = new Error(`item_stack_response rejected request ${id}: ${response.status}`)
+        error.response = response
+        waiter.reject(error)
       }
     }
   })
@@ -332,11 +596,44 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     })
   }
 
-  async function transactInventory (request, changedSlots) {
-    const id = sendItemStackRequest(request)
-    const response = await waitForItemStackResponse(id)
-    applyConfirmedRequest(request, response, changedSlots)
-    return response
+  async function sendPredictedInventoryRequest (request, prediction) {
+    if (activeBatch) return recordBatchedPrediction(request, prediction)
+
+    const transaction = startPendingTransaction(request, prediction)
+    try {
+      const id = sendItemStackRequest(request)
+      const response = await waitForItemStackResponse(id)
+      reconcileAcceptedPrediction(transaction, response)
+      return response
+    } catch (err) {
+      if (pendingTransactions.has(request.request_id)) throw rollbackPrediction(transaction, err.response, err)
+      throw err
+    }
+  }
+
+  async function sendPredictedInventoryRequests (requests, predictions) {
+    const transactions = requests.map((request, index) => startPendingTransaction(request, predictions[index]))
+    try {
+      const waits = requests.map(request => waitForItemStackResponse(request.request_id))
+      sendItemStackRequests(requests)
+      const responses = await Promise.all(waits)
+      for (let i = 0; i < responses.length; i++) reconcileAcceptedPrediction(transactions[i], responses[i])
+      return responses
+    } catch (err) {
+      for (const transaction of transactions) {
+        if (pendingTransactions.has(transaction.request.request_id)) rollbackPrediction(transaction, err.response, err)
+      }
+      throw err
+    }
+  }
+
+  async function transactInventory (request, changedSlots = []) {
+    const prediction = predictRequest(request)
+    for (const slot of changedSlots) {
+      if (!prediction.changedSlots.includes(slot)) prediction.changedSlots.push(slot)
+    }
+
+    return sendPredictedInventoryRequest(request, prediction)
   }
 
   function makeRequest (actions) {
@@ -344,7 +641,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       request_id: requestId(),
       actions,
       custom_names: [],
-      cause: 'chat_public'
+      cause: -1
     }
   }
 
@@ -391,9 +688,24 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     }
   }
 
-  async function swapInventorySlots (slotA, slotB) {
-    const source = stackRequestSlotInfo(slotA, itemAt(slotA))
-    const destination = stackRequestSlotInfo(slotB, itemAt(slotB))
+  function swapInventorySlots (slotA, slotB) {
+    const itemA = itemAt(slotA)
+    const itemB = itemAt(slotB)
+    if (!itemA && !itemB) {
+      return Promise.resolve({
+        request: null,
+        requests: [],
+        response: null,
+        responses: [],
+        predicted: predictionSnapshot(),
+        cursor: cursorSnapshot()
+      })
+    }
+    if (!itemB) return moveInventorySlot(slotA, slotB)
+    if (!itemA) return moveInventorySlot(slotB, slotA)
+
+    const source = playerStackRequestSlotInfo(slotA, itemAt(slotA))
+    const destination = playerStackRequestSlotInfo(slotB, itemAt(slotB))
 
     const request = makeRequest([
       swapAction(source, destination)
@@ -421,9 +733,9 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     return itemAt(hotbarSlot)
   }
 
-  async function moveInventorySlot (fromSlot, toSlot) {
-    const source = stackRequestSlotInfo(fromSlot, itemAt(fromSlot))
-    const destination = stackRequestSlotInfo(toSlot, itemAt(toSlot))
+  function moveInventorySlot (fromSlot, toSlot) {
+    const source = playerStackRequestSlotInfo(fromSlot, itemAt(fromSlot))
+    const destination = playerStackRequestSlotInfo(toSlot, itemAt(toSlot))
 
     const request = makeRequest([
       takeAction(itemAt(fromSlot).count, source, destination)
@@ -432,24 +744,24 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     return transactInventory(request, [fromSlot, toSlot])
   }
 
-  async function mergeInventorySlots (fromSlot, toSlot) {
+  function mergeInventorySlots (fromSlot, toSlot) {
     const from = itemAt(fromSlot)
     const to = itemAt(toSlot)
     const count = Math.min(from.count, maxStackSize(to) - to.count)
 
     const request = makeRequest([
-      takeAction(count, stackRequestSlotInfo(fromSlot, from), stackRequestSlotInfo(toSlot, to))
+      takeAction(count, playerStackRequestSlotInfo(fromSlot, from), playerStackRequestSlotInfo(toSlot, to))
     ])
 
     return transactInventory(request, [fromSlot, toSlot])
   }
 
-  async function moveOneInventoryItem (fromSlot, toSlot) {
+  function moveOneInventoryItem (fromSlot, toSlot) {
     const from = itemAt(fromSlot)
     const to = itemAt(toSlot)
 
-    const source = stackRequestSlotInfo(fromSlot, from)
-    const destination = stackRequestSlotInfo(toSlot, to)
+    const source = playerStackRequestSlotInfo(fromSlot, from)
+    const destination = playerStackRequestSlotInfo(toSlot, to)
 
     const request = makeRequest([
       takeAction(1, source, destination)
@@ -458,46 +770,209 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     return transactInventory(request, [fromSlot, toSlot])
   }
 
-  async function splitInventorySlot (fromSlot, toSlot) {
+  function splitInventorySlot (fromSlot, toSlot) {
     const count = Math.ceil(itemAt(fromSlot).count / 2)
 
     const request = makeRequest([
-      takeAction(count, stackRequestSlotInfo(fromSlot, itemAt(fromSlot)), stackRequestSlotInfo(toSlot, itemAt(toSlot)))
+      takeAction(count, playerStackRequestSlotInfo(fromSlot, itemAt(fromSlot)), playerStackRequestSlotInfo(toSlot, itemAt(toSlot)))
     ])
 
     return transactInventory(request, [fromSlot, toSlot])
   }
 
-  async function dropInventorySlot (slot, randomly = false) {
+  function dropInventorySlot (slot, randomly = false) {
     const request = makeRequest([
-      dropAction(itemAt(slot).count, stackRequestSlotInfo(slot, itemAt(slot)), randomly)
+      dropAction(itemAt(slot).count, playerStackRequestSlotInfo(slot, itemAt(slot)), randomly)
     ])
 
     return transactInventory(request, [slot])
   }
 
-  async function dropOneInventoryItem (slot, randomly = false) {
+  function dropOneInventoryItem (slot, randomly = false) {
     const request = makeRequest([
-      dropAction(1, stackRequestSlotInfo(slot, itemAt(slot)), randomly)
+      dropAction(1, playerStackRequestSlotInfo(slot, itemAt(slot)), randomly)
     ])
 
     return transactInventory(request, [slot])
   }
 
-  async function destroyInventorySlot (slot) {
+  function destroyInventorySlot (slot) {
     const request = makeRequest([
-      dropAction(itemAt(slot).count, stackRequestSlotInfo(slot, itemAt(slot)), false)
+      destroyAction(itemAt(slot).count, playerStackRequestSlotInfo(slot, itemAt(slot)))
     ])
 
     return transactInventory(request, [slot])
   }
 
-  async function destroyOneInventoryItem (slot) {
+  function destroyOneInventoryItem (slot) {
     const request = makeRequest([
-      dropAction(1, stackRequestSlotInfo(slot, itemAt(slot)), false)
+      destroyAction(1, playerStackRequestSlotInfo(slot, itemAt(slot)))
     ])
 
     return transactInventory(request, [slot])
+  }
+
+  function pickupInventorySlot (slot, count = null) {
+    assertInventorySlot(slot)
+    const item = itemAt(slot)
+    if (!item) throw new Error(`No item in slot ${slot}`)
+
+    const amount = count == null ? item.count : count
+    if (!Number.isInteger(amount) || amount <= 0 || amount > item.count) {
+      throw new RangeError(`count must be between 1 and ${item.count}`)
+    }
+
+    const beforeSlots = cloneSlots(currentPredictionState().slots)
+    const beforeCursor = cloneStack(currentPredictionState().cursor)
+    const slots = cloneSlots(beforeSlots)
+    const cursor = cloneStack(item, amount)
+    slots[slot] = item.count === amount ? null : cloneStack(item, item.count - amount)
+    const prediction = {
+      slots,
+      cursor,
+      beforeSlots,
+      beforeCursor,
+      changedSlots: [slot],
+      cursorChanged: true
+    }
+
+    if (activeBatch) {
+      activeBatch.predictedSlots = cloneSlots(slots)
+      activeBatch.predictedCursor = cloneStack(cursor)
+      activeBatch.touchedSlots.add(slot)
+      activeBatch.cursorTouched = true
+    } else {
+      predictedSlots = cloneSlots(slots)
+      predictedCursor = cloneStack(cursor)
+    }
+    setCurrentVirtualCursor({
+      sourceSlot: slot,
+      sourceItem: item,
+      item: cursor
+    })
+    publishPrediction(prediction)
+
+    return Promise.resolve({
+      virtual: true,
+      request: null,
+      response: null,
+      predicted: predictionSnapshot(),
+      cursor: cursorSnapshot()
+    })
+  }
+
+  function placeCursorItem (slot, count = null) {
+    assertInventorySlot(slot)
+    if (!predictedCursor) throw new Error('No item on inventory cursor')
+
+    const amount = count == null ? predictedCursor.count : count
+    const virtual = currentVirtualCursor()
+    if (virtual) return placeVirtualCursorItem(slot, amount, virtual)
+
+    const request = makeRequest([
+      placeAction(amount, cursorSlotInfo(predictedCursor), playerStackRequestSlotInfo(slot, itemAt(slot)))
+    ])
+    return transactInventory(request, [slot])
+  }
+
+  function placeVirtualCursorItem (slot, amount, virtual) {
+    if (!Number.isInteger(amount) || amount <= 0 || amount > predictedCursor.count) {
+      throw new RangeError(`count must be between 1 and ${predictedCursor.count}`)
+    }
+
+    const destination = itemAt(slot)
+    if (destination && !sameItem(destination, predictedCursor)) {
+      throw new Error('Cannot place a virtual cursor onto an incompatible item')
+    }
+
+    const before = currentPredictionState()
+    const beforeSlots = cloneSlots(before.slots)
+    const beforeCursor = cloneStack(before.cursor)
+    const slots = cloneSlots(beforeSlots)
+    const moving = cloneStack(predictedCursor, amount)
+    slots[slot] = destination ? cloneStack(destination, destination.count + amount) : moving
+    const remainingCursor = predictedCursor.count === amount ? null : cloneStack(predictedCursor, predictedCursor.count - amount)
+    const remainingVirtual = remainingCursor
+      ? { sourceSlot: virtual.sourceSlot, sourceItem: virtual.sourceItem, item: remainingCursor }
+      : null
+    const request = makeRequest([
+      takeAction(amount, playerStackRequestSlotInfo(virtual.sourceSlot, virtual.sourceItem), playerStackRequestSlotInfo(slot, destination))
+    ])
+    const prediction = {
+      slots,
+      cursor: remainingCursor,
+      beforeSlots,
+      beforeCursor,
+      beforeVirtualCursor: virtual,
+      virtualCursor: remainingVirtual,
+      changedSlots: [...new Set([virtual.sourceSlot, slot])],
+      cursorChanged: true
+    }
+    setCurrentVirtualCursor(remainingVirtual)
+
+    return sendPredictedInventoryRequest(request, prediction)
+  }
+
+  async function batchInventoryActions (fn) {
+    if (activeBatch) throw new Error('Nested inventory action batches are not supported')
+    ensurePredictedSlots()
+
+    const batch = {
+      requests: [],
+      predictions: [],
+      beforeSlots: cloneSlots(predictedSlots),
+      beforeCursor: cloneStack(predictedCursor),
+      predictedSlots: cloneSlots(predictedSlots),
+      predictedCursor: cloneStack(predictedCursor),
+      virtualCursor: cloneVirtualCursor(virtualCursor),
+      touchedSlots: new Set(),
+      cursorTouched: false
+    }
+
+    activeBatch = batch
+    let result
+    try {
+      result = await fn(botState.inventory)
+    } catch (err) {
+      predictedSlots = cloneSlots(batch.beforeSlots)
+      predictedCursor = cloneStack(batch.beforeCursor)
+      virtualCursor = cloneVirtualCursor(batch.virtualCursor)
+      throw err
+    } finally {
+      if (activeBatch === batch) activeBatch = null
+    }
+
+    if (batch.requests.length === 0) {
+      return {
+        request: null,
+        requests: [],
+        response: null,
+        responses: [],
+        result,
+        predicted: predictionSnapshot(),
+        cursor: cursorSnapshot()
+      }
+    }
+
+    const prediction = {
+      slots: cloneSlots(batch.predictedSlots),
+      cursor: cloneStack(batch.predictedCursor),
+      beforeSlots: cloneSlots(batch.beforeSlots),
+      beforeCursor: cloneStack(batch.beforeCursor),
+      changedSlots: [...batch.touchedSlots],
+      cursorChanged: batch.cursorTouched
+    }
+    const responses = await sendPredictedInventoryRequests(batch.requests, batch.predictions)
+
+    return {
+      request: batch.requests[batch.requests.length - 1],
+      requests: batch.requests,
+      response: responses[responses.length - 1],
+      responses,
+      result,
+      predicted: predictionSnapshot(),
+      cursor: cursorSnapshot()
+    }
   }
 
   function clearInventoryActionWaiters () {
@@ -508,10 +983,34 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
     pendingResponses.clear()
     pendingSlotUpdates.clear()
+    pendingTransactions.clear()
+    syncPredictedSlotsFromActual(true)
   }
 
   function attachInventoryActions () {
     if (!botState.inventory) return
+    syncPredictedSlotsFromActual(true)
+
+    if (!botState.inventory.__predictionSyncAttached) {
+      Object.defineProperty(botState.inventory, '__predictionSyncAttached', {
+        configurable: false,
+        enumerable: false,
+        value: true
+      })
+      botState.inventory.on('updateSlot', () => syncPredictedSlotsFromActual())
+    }
+
+    Object.defineProperty(botState.inventory, 'predicted', {
+      configurable: true,
+      enumerable: true,
+      get: predictionSnapshot
+    })
+
+    Object.defineProperty(botState.inventory, 'cursor', {
+      configurable: true,
+      enumerable: true,
+      get: cursorSnapshot
+    })
 
     Object.assign(botState.inventory, {
       select: selectHotbarSlot,
@@ -521,6 +1020,8 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       merge: mergeInventorySlots,
       move1: moveOneInventoryItem,
       split: splitInventorySlot,
+      pickup: pickupInventorySlot,
+      placeCursor: placeCursorItem,
       drop: dropInventorySlot,
       drop1: dropOneInventoryItem,
       destroy: destroyInventorySlot,
@@ -539,13 +1040,15 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
         inventoryUpdateTimeoutMs = ms
       },
       clearWaiters: clearInventoryActionWaiters,
+      batch: batchInventoryActions,
       makeRequest,
       takeAction,
       placeAction,
       swapAction,
       dropAction,
       destroyAction,
-      stackSlotInfo: stackRequestSlotInfo,
+      cursorSlotInfo,
+      stackSlotInfo: playerStackRequestSlotInfo,
       cloneItem,
       setStackId,
       maxStackSize,
@@ -576,6 +1079,9 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   botState.mergeInventorySlots = mergeInventorySlots
   botState.moveOneInventoryItem = moveOneInventoryItem
   botState.splitInventorySlot = splitInventorySlot
+  botState.pickupInventorySlot = pickupInventorySlot
+  botState.placeCursorItem = placeCursorItem
+  botState.batchInventoryActions = batchInventoryActions
 
   botState.dropInventorySlot = dropInventorySlot
   botState.dropOneInventoryItem = dropOneInventoryItem
@@ -588,13 +1094,15 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     sendStandalone: sendStandaloneItemStackRequest,
     wait: waitForItemStackResponse,
     waitRaw: waitForRawItemStackResponse,
+    batch: batchInventoryActions,
     makeRequest,
     takeAction,
     placeAction,
     swapAction,
     dropAction,
     destroyAction,
-    stackSlotInfo: stackRequestSlotInfo,
+    cursorSlotInfo,
+    stackSlotInfo: playerStackRequestSlotInfo,
     cloneItem,
     setStackId,
     maxStackSize,
@@ -612,6 +1120,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   botState.clearInventoryActionWaiters = clearInventoryActionWaiters
+  botState.shouldDeferInventoryStackResponse = response => pendingTransactions.has(response?.request_id)
   botState._attachInventoryActions = attachInventoryActions
   attachInventoryActions()
 

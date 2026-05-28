@@ -351,6 +351,8 @@ for inventory mirror shape, stack request helpers, common actions, and events.
 | `bot.inventory.findItem` | `findItem(itemType, metadata, notFull, nbt, windowId = 0)` | item or `null` | Searches inventory range through Prismarine window helpers. |
 | `bot.inventory.count` | `count(itemType, metadata, windowId = 0)` | number | Counts matching items in a window. |
 | `bot.inventory.applyItemStackResponse` | `applyItemStackResponse(response)` | `undefined` | Applies accepted server stack ids/counts into local inventory mirror. |
+| `bot.inventory.predicted` | property | prediction snapshot | Read-only unified predicted inventory state. The snapshot is array-compatible for player slots and also exposes `.slots`, `.cursor`, `.windows`, `.activeWindowId`, `.activeWindow`, `.uiSlots`, `.armor`, `.offhand`, `.craftingInput`, `.creativeOutput`, and `.slot(slotInfo)`. Syncs with actual slots when no predicted transaction is pending. |
+| `bot.inventory.cursor` | property | item or `null` | Compatibility alias for `bot.inventory.predicted.cursor`. |
 
 ```js
 const stick = bot.inventory.findItem(bot.registry.itemsByName.stick.id)
@@ -363,7 +365,9 @@ See [`docs/reference/inventory-and-actions.md`](reference/inventory-and-actions.
 for inventory mirror shape, stack request helpers, common actions, and events.
 
 These helpers send Bedrock `item_stack_request` actions. They rely on stack ids,
-server responses, and inventory mirror updates.
+server responses, and inventory mirror updates. Player inventory actions update
+`bot.inventory.predicted` before the response arrives, then reconcile against
+the server response as ground truth.
 
 | API | Maturity | Signature | Returns | Side effects and failures |
 | --- | --- | --- | --- | --- |
@@ -371,6 +375,7 @@ server responses, and inventory mirror updates.
 | `bot.inventory.actions.sendStandalone` | `sendStandalone(request)` | request id | Sends standalone `item_stack_request` and emits `inventory_action_request`. |
 | `bot.inventory.actions.wait` | `wait(id, timeoutMs?)` | `Promise<response>` | Resolves only accepted responses; rejects on error/timeout. |
 | `bot.inventory.actions.waitRaw` | `waitRaw(id, timeoutMs?)` | `Promise<response>` | Resolves even rejected responses for callers that need raw status. |
+| `bot.inventory.actions.batch` | `batch(fn)` | `Promise<{ request, requests, response, responses, result, predicted, cursor }>` | Records player inventory actions inside `fn` and sends one packet containing ordered stack request entries. Adjacent same-source/same-destination split-and-merge operations may be coalesced into one request when that is the valid server shape. |
 | `bot.inventory.select` | `select(slot)` | selected item | Sends hotbar selection and emits `held_item_slot_changed`. |
 | `bot.inventory.equip` | `async equip(slot, hotbarSlot = 0)` | equipped item | Selects hotbar item or swaps inventory slot into a hotbar slot. |
 | `bot.inventory.swap` | `async swap(slotA, slotB)` | response | Swaps slots. |
@@ -378,6 +383,8 @@ server responses, and inventory mirror updates.
 | `bot.inventory.merge` | `async merge(fromSlot, toSlot)` | response | Moves as much as destination can accept. |
 | `bot.inventory.move1` | `async move1(fromSlot, toSlot)` | response | Moves one item. |
 | `bot.inventory.split` | `async split(fromSlot, toSlot)` | response | Moves half of source, rounded up. |
+| `bot.inventory.pickup` | `async pickup(slot, count?)` | prediction result | Takes a slot, or part of it, onto the predicted cursor. In the closed-inventory player path this may be local-only until a later cursor placement/drop flushes a request. |
+| `bot.inventory.placeCursor` | `async placeCursor(slot, count?)` | response | Places the predicted cursor, or part of it, into a slot and flushes the pending cursor move when possible. |
 | `bot.inventory.drop` | `async drop(slot, randomly = false)` | response | Drops the whole stack. |
 | `bot.inventory.drop1` | `async drop1(slot, randomly = false)` | response | Drops one item. |
 | `bot.inventory.destroy` | `async destroy(slot)` | response | Destroys/removes the whole stack through the request path. |
@@ -689,6 +696,9 @@ events below are higher-level built-in events emitted by `bot`.
 | `entityCrouch` / `entityUncrouch` | `partial` | entity | players |
 | `held_item_slot_changed` | `stable` | slot, item | inventory-actions |
 | `inventory_action_request` | `packet-level` | request | inventory-actions |
+| `inventory_prediction_updated` | `partial` | prediction snapshot payload | inventory-actions |
+| `inventory_prediction_reconciled` | `partial` | request, response, changed slots, mismatches | inventory-actions |
+| `inventory_prediction_failed` | `partial` | error, request, response, mismatches | inventory-actions |
 | `item_stack_response` | `packet-level` | parsed response | inventory-actions |
 | `inventory_response_applied` | `partial` | response, changed slot list | inventory |
 | `ui_slot_projected` | `partial` | projection payload | inventory |
@@ -737,9 +747,9 @@ recommended as stable public API unless promoted later.
 | `bot._authInputHooks` | `internal` | Internal hook array. |
 | `bot._craftRequestId` | `internal` | Crafting request id counter. |
 | `bot._craftingUtilPlannerPromise` | `internal` | Cached planner promise. |
-| `bot.inventoryActionHelpers` | `internal` | Request/action builders and item helpers: `makeRequest`, `takeAction`, `placeAction`, `swapAction`, `dropAction`, `destroyAction`, `stackSlotInfo`, `cloneItem`, `setStackId`, `maxStackSize`, `sameItem`, `responseStatusOk`, `parseItemStackResponsePacket`. |
+| `bot.inventoryActionHelpers` | `internal` | Request/action builders and item helpers: `batch`, `makeRequest`, `takeAction`, `placeAction`, `swapAction`, `dropAction`, `destroyAction`, `cursorSlotInfo`, `stackSlotInfo`, `cloneItem`, `setStackId`, `maxStackSize`, `sameItem`, `responseStatusOk`, `parseItemStackResponsePacket`. |
 | `bot.tradeHelpers` | `internal` | Trade item/recipe/request builders used for packet parity and Geyser behavior. |
-| `require('.../src/builtins/inventory-simulation')` | `internal` | Exports `simulateClick`, `ClickType`, `buttonNum`, and `menuLocationForWindow`; this file is not auto-injected as a bot plugin. |
+| `require('.../src/builtins/inventory-simulation')` | `internal` | Exports click simulation, pure stack-request prediction helpers, and `InventorySimulationState`; this file is not auto-injected as a bot plugin. |
 | `crafting._craftingHelpers` | `internal` | Craft action builder/test helpers exported from `src/builtins/crafting.js`. |
 | `food._foodHelpers` | `internal` | Food metadata and packet builders exported from `src/builtins/food.js`. |
 | `bot.protocolState`, `bot.chunkState`, `bot.targetStateIds`, `bot.currentTargetBlock` | `internal` | Runtime bookkeeping for packet/world behavior. |

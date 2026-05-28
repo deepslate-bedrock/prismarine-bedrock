@@ -325,6 +325,7 @@ function inject (botState, options = {}) {
 
   botState.client.on('item_stack_response', (packet) => {
     for (const response of packet.responses || []) {
+      if (botState.shouldDeferInventoryStackResponse?.(response)) continue
       if (itemStackResponseStatusOk(response)) applyItemStackResponseToInventory(response)
     }
   })

@@ -11,6 +11,549 @@ function stackable (item) { return item && item.count < 64 } // vanilla max stac
 function count (item) { return item ? item.count : 0 }
 function kind (item) { return item ? item.type : -1 }
 
+function stackId (item) {
+  return item ? item.stackId ?? item.stack_id ?? 0 : 0
+}
+
+function setStackId (item, id) {
+  if (!item) return item
+  item.stackId = id
+  item.stack_id = id
+  return item
+}
+
+function cloneStack (item, newCount = item?.count) {
+  if (!item || newCount <= 0) return null
+
+  let cloned
+  try {
+    cloned = item.constructor && item.constructor !== Object
+      ? new item.constructor(item.type, newCount, item.metadata, item.nbt, stackId(item), true)
+      : { ...item }
+  } catch {
+    cloned = { ...item }
+  }
+
+  Object.assign(cloned, item)
+  cloned.count = newCount
+  return setStackId(cloned, stackId(item))
+}
+
+function cloneSlots (slots) {
+  return Array.from(slots || [], item => cloneStack(item))
+}
+
+function sameStackType (a, b) {
+  if (!a || !b) return false
+  if (a.name != null && b.name != null && a.name !== b.name) return false
+  return a.type === b.type && (a.metadata ?? 0) === (b.metadata ?? 0)
+}
+
+function maxStackSizeFor (item, options = {}) {
+  if (!item) return 64
+  if (typeof options.maxStackSize === 'function') return options.maxStackSize(item)
+  return item.stackSize || item.maxStackSize || 64
+}
+
+function fullContainerId (slotInfo) {
+  return slotInfo?.slot_type?.container_id ?? slotInfo?.container_id ?? 'inventory'
+}
+
+function slotIndexForStackRequest (slotInfo, state = null) {
+  const containerId = fullContainerId(slotInfo)
+  if (containerId === 'cursor') return null
+  if (containerId === 'inventory') return slotInfo.slot + 9
+  if (containerId === 'hotbar' || containerId === 'hotbar_and_inventory') return slotInfo.slot
+  if (containerId === 'armor' || containerId === 'offhand') return slotInfo.slot
+  if (containerId === 'container' || containerId === 'crafting_input' || containerId === 'creative_output') return slotInfo.slot
+
+  if (state?.windows?.has(containerId)) return slotInfo.slot
+
+  throw new Error(`Unsupported predictive inventory container: ${containerId}`)
+}
+
+function containerArrayFor (state, containerId) {
+  if (containerId === 'hotbar' || containerId === 'inventory' || containerId === 'hotbar_and_inventory') return state.slots
+  if (containerId === 'container') return state.activeWindow?.slots ?? state.windows?.get(state.activeWindowId)?.slots ?? []
+  if (containerId === 'crafting_input') return state.craftingInput ?? state.windows?.get('crafting_input')?.slots ?? []
+  if (containerId === 'creative_output') return state.creativeOutput ?? state.windows?.get('creative_output')?.slots ?? []
+  if (containerId === 'armor') return state.armor ?? state.windows?.get('armor')?.slots ?? []
+  if (containerId === 'offhand') return state.offhand ?? state.windows?.get('offhand')?.slots ?? []
+  return state.windows?.get(containerId)?.slots ?? []
+}
+
+function getPredictedRef (state, slotInfo) {
+  const containerId = fullContainerId(slotInfo)
+  if (containerId === 'cursor') return state.cursor
+  return containerArrayFor(state, containerId)[slotIndexForStackRequest(slotInfo, state)]
+}
+
+function markContainerChanged (state, containerId, slot) {
+  if (containerId === 'hotbar' || containerId === 'inventory' || containerId === 'hotbar_and_inventory') {
+    state.changedSlots.add(slot)
+    return
+  }
+  state.changedContainers ??= new Map()
+  if (!state.changedContainers.has(containerId)) state.changedContainers.set(containerId, new Set())
+  state.changedContainers.get(containerId).add(slot)
+}
+
+function setPredictedRef (state, slotInfo, item) {
+  const containerId = fullContainerId(slotInfo)
+  if (containerId === 'cursor') {
+    state.cursor = cloneStack(item)
+    state.cursorChanged = true
+    return
+  }
+
+  const slot = slotIndexForStackRequest(slotInfo, state)
+  containerArrayFor(state, containerId)[slot] = cloneStack(item)
+  markContainerChanged(state, containerId, slot)
+}
+
+function movePredictedCount (state, sourceInfo, destinationInfo, amount, options) {
+  const source = getPredictedRef(state, sourceInfo)
+  if (!isPresent(source)) throw new Error('Cannot predict stack request: source slot is empty')
+  if (!Number.isInteger(amount) || amount <= 0 || amount > source.count) {
+    throw new RangeError(`Cannot predict stack request: count must be between 1 and ${source.count}`)
+  }
+
+  const destination = getPredictedRef(state, destinationInfo)
+  if (isPresent(destination) && !sameStackType(source, destination)) {
+    throw new Error('Cannot predict stack request: destination contains a different item')
+  }
+
+  const remaining = source.count - amount
+  const nextSource = cloneStack(source, remaining)
+  let nextDestination
+
+  if (isPresent(destination)) {
+    const space = maxStackSizeFor(destination, options) - destination.count
+    if (amount > space) throw new Error(`Cannot predict stack request: destination only has room for ${space}`)
+    nextDestination = cloneStack(destination, destination.count + amount)
+  } else {
+    nextDestination = cloneStack(source, amount)
+    const destinationStackId = destinationInfo?.stack_id ?? 0
+    setStackId(nextDestination, destinationStackId || options.provisionalStackId || 0)
+  }
+
+  setPredictedRef(state, sourceInfo, nextSource)
+  setPredictedRef(state, destinationInfo, nextDestination)
+}
+
+function swapPredictedRefs (state, sourceInfo, destinationInfo) {
+  const source = cloneStack(getPredictedRef(state, sourceInfo))
+  const destination = cloneStack(getPredictedRef(state, destinationInfo))
+  setPredictedRef(state, sourceInfo, destination)
+  setPredictedRef(state, destinationInfo, source)
+}
+
+function removePredictedCount (state, sourceInfo, amount) {
+  const source = getPredictedRef(state, sourceInfo)
+  if (!isPresent(source)) throw new Error('Cannot predict stack request: source slot is empty')
+  if (!Number.isInteger(amount) || amount <= 0 || amount > source.count) {
+    throw new RangeError(`Cannot predict stack request: count must be between 1 and ${source.count}`)
+  }
+
+  setPredictedRef(state, sourceInfo, cloneStack(source, source.count - amount))
+}
+
+function simulateStackRequestAction (state, action, options = {}) {
+  switch (action.type_id) {
+    case 'take':
+    case 'place':
+    case 'place_in_container':
+    case 'take_out_container':
+      movePredictedCount(state, action.source, action.destination, action.count, options)
+      break
+    case 'swap':
+      swapPredictedRefs(state, action.source, action.destination)
+      break
+    case 'drop':
+    case 'destroy':
+    case 'consume':
+      removePredictedCount(state, action.source, action.count)
+      break
+    case 'create':
+      // Created leftovers are represented by subsequent place/take actions or by
+      // server response slots. Marking a slot here would require item identity.
+      state.metadataActions.push(action)
+      break
+    case 'craft_recipe':
+    case 'craft_recipe_auto':
+    case 'craft_creative':
+    case 'optional':
+    case 'craft_grindstone_request':
+    case 'craft_loom_request':
+    case 'results_deprecated':
+    case 'lab_table_combine':
+    case 'beacon_payment':
+    case 'mine_block':
+    case 'non_implemented':
+      state.metadataActions.push(action)
+      break
+    default:
+      throw new Error(`Unsupported predictive stack request action: ${action.type_id}`)
+  }
+}
+
+function simulateStackRequest (baseState, requestOrActions, options = {}) {
+  const actions = Array.isArray(requestOrActions) ? requestOrActions : requestOrActions?.actions
+  if (!Array.isArray(actions)) throw new TypeError('simulateStackRequest expects a request or action array')
+
+  const state = {
+    slots: cloneSlots(baseState?.slots),
+    cursor: cloneStack(baseState?.cursor),
+    changedSlots: new Set(),
+    changedContainers: new Map(),
+    cursorChanged: false,
+    metadataActions: [],
+    windows: cloneWindowMap(baseState?.windows),
+    activeWindowId: baseState?.activeWindowId,
+    activeWindow: cloneWindow(baseState?.activeWindow),
+    uiSlots: cloneSlotMap(baseState?.uiSlots),
+    armor: cloneSlots(baseState?.armor),
+    offhand: cloneSlots(baseState?.offhand),
+    craftingInput: cloneSlots(baseState?.craftingInput),
+    creativeOutput: cloneSlots(baseState?.creativeOutput),
+    syntheticStackId: 0
+  }
+
+  for (const action of actions) simulateStackRequestAction(state, action, options)
+
+  return {
+    slots: state.slots,
+    cursor: state.cursor,
+    changedSlots: [...state.changedSlots],
+    changedContainers: mapSetToObject(state.changedContainers),
+    cursorChanged: state.cursorChanged,
+    metadataActions: state.metadataActions,
+    windows: state.windows,
+    activeWindowId: state.activeWindowId,
+    activeWindow: state.activeWindow,
+    uiSlots: state.uiSlots,
+    armor: state.armor,
+    offhand: state.offhand,
+    craftingInput: state.craftingInput,
+    creativeOutput: state.creativeOutput
+  }
+}
+
+function cloneSlotMap (map) {
+  const cloned = new Map()
+  for (const [key, item] of map || []) cloned.set(key, cloneStack(item))
+  return cloned
+}
+
+function cloneWindow (window) {
+  if (!window) return null
+  return {
+    id: window.id,
+    type: window.type,
+    title: window.title,
+    windowType: window.windowType,
+    inventoryStart: window.inventoryStart,
+    inventoryEnd: window.inventoryEnd,
+    hotbarStart: window.hotbarStart,
+    slots: cloneSlots(window.slots || [])
+  }
+}
+
+function cloneWindowMap (windows) {
+  const cloned = new Map()
+  for (const [id, window] of windows || []) cloned.set(id, cloneWindow(window))
+  return cloned
+}
+
+function mapSetToObject (map) {
+  const out = {}
+  for (const [key, set] of map || []) out[key] = [...set]
+  return out
+}
+
+function itemStackIdFromServerSlot (slot) {
+  return slot?.item_stack_id ?? slot?.stack_id ?? 0
+}
+
+function readonlySnapshot (state) {
+  const windows = {}
+  for (const [id, window] of state.windows || []) windows[id] = cloneWindow(window)
+  const activeWindow = state.activeWindowId != null ? windows[state.activeWindowId] ?? cloneWindow(state.activeWindow) : null
+  const slots = cloneSlots(state.slots)
+  Object.defineProperties(slots, {
+    slots: { value: slots, enumerable: false },
+    cursor: { value: cloneStack(state.cursor), enumerable: false },
+    windows: { value: windows, enumerable: false },
+    activeWindowId: { value: state.activeWindowId, enumerable: false },
+    activeWindow: { value: activeWindow, enumerable: false },
+    uiSlots: { value: cloneSlotMap(state.uiSlots), enumerable: false },
+    armor: { value: cloneSlots(state.armor), enumerable: false },
+    offhand: { value: cloneSlots(state.offhand), enumerable: false },
+    craftingInput: { value: cloneSlots(state.craftingInput), enumerable: false },
+    creativeOutput: { value: cloneSlots(state.creativeOutput), enumerable: false },
+    slot: { value: slotInfo => cloneStack(getPredictedRef(state, slotInfo)), enumerable: false }
+  })
+  return Object.freeze(slots)
+}
+
+class InventorySimulationState extends EventEmitter {
+  constructor (botState = null, options = {}) {
+    super()
+    this.botState = botState
+    this.options = options
+    this.slots = []
+    this.cursor = null
+    this.windows = new Map()
+    this.uiSlots = new Map()
+    this.activeWindowId = null
+    this.activeWindow = null
+    this.armor = []
+    this.offhand = []
+    this.craftingInput = []
+    this.creativeOutput = []
+    this.pendingTransactions = new Map()
+    this.activeBatch = null
+    if (botState) this.syncFromBot(true)
+  }
+
+  syncFromBot (force = false) {
+    if (!this.botState?.inventory) return
+    if (!force && (this.pendingTransactions.size > 0 || this.activeBatch)) return
+
+    this.slots = cloneSlots(this.botState.inventory.slots)
+    this.activeWindowId = this.botState.activeWindowId
+    this.windows = cloneWindowMap(this.botState.windows)
+    this.uiSlots = cloneSlotMap(this.botState.uiSlots)
+    this.activeWindow = this.windows.get(this.activeWindowId) ?? null
+    this.armor = cloneSlots(this.botState.armor?.slots)
+    this.offhand = cloneSlots(this.botState.offhand?.slots)
+    this.craftingInput = cloneSlots(this.windows.get(this.activeWindowId)?.slots)
+    this.creativeOutput = cloneSlots(this.botState.creativeItems)
+  }
+
+  stateView () {
+    return {
+      slots: this.activeBatch?.state.slots ?? this.slots,
+      cursor: this.activeBatch?.state.cursor ?? this.cursor,
+      windows: this.activeBatch?.state.windows ?? this.windows,
+      activeWindowId: this.activeBatch?.state.activeWindowId ?? this.activeWindowId,
+      activeWindow: this.activeBatch?.state.activeWindow ?? this.activeWindow,
+      uiSlots: this.activeBatch?.state.uiSlots ?? this.uiSlots,
+      armor: this.activeBatch?.state.armor ?? this.armor,
+      offhand: this.activeBatch?.state.offhand ?? this.offhand,
+      craftingInput: this.activeBatch?.state.craftingInput ?? this.craftingInput,
+      creativeOutput: this.activeBatch?.state.creativeOutput ?? this.creativeOutput
+    }
+  }
+
+  snapshot () {
+    return readonlySnapshot(this.stateView())
+  }
+
+  simulateRequest (request) {
+    const base = this.stateView()
+    return {
+      request,
+      before: this.cloneState(base),
+      after: simulateStackRequest(base, request, {
+        ...this.options,
+        provisionalStackId: request?.request_id
+      })
+    }
+  }
+
+  beginBatch () {
+    if (this.activeBatch) throw new Error('Nested inventory simulation batches are not supported')
+    this.syncFromBot(false)
+    this.activeBatch = {
+      before: this.cloneState(this.stateView()),
+      state: this.cloneState(this.stateView()),
+      requests: [],
+      predictions: []
+    }
+  }
+
+  recordBatchRequest (request) {
+    if (!this.activeBatch) throw new Error('No active inventory simulation batch')
+    const prediction = this.simulateRequest(request)
+    this.activeBatch.requests.push(request)
+    this.activeBatch.predictions.push(prediction)
+    this.activeBatch.state = this.cloneState(prediction.after)
+    this.publishPrediction(prediction.after)
+    return prediction
+  }
+
+  commitBatch () {
+    const batch = this.activeBatch
+    this.activeBatch = null
+    if (!batch) throw new Error('No active inventory simulation batch')
+    const prediction = {
+      request: batch.requests[batch.requests.length - 1] ?? null,
+      requests: batch.requests,
+      before: batch.before,
+      after: batch.state,
+      changedSlots: [...new Set(batch.predictions.flatMap(entry => entry.after.changedSlots || []))],
+      changedContainers: mergeChangedContainers(batch.predictions.map(entry => entry.after.changedContainers)),
+      cursorChanged: batch.predictions.some(entry => entry.after.cursorChanged)
+    }
+    this.applyPredictedState(batch.state)
+    return prediction
+  }
+
+  rollbackBatch () {
+    if (!this.activeBatch) return
+    this.applyPredictedState(this.activeBatch.before)
+    this.activeBatch = null
+  }
+
+  startPending (requestOrRequests, prediction) {
+    const requests = Array.isArray(requestOrRequests) ? requestOrRequests : [requestOrRequests]
+    const transaction = {
+      requests,
+      request: requests[requests.length - 1],
+      before: this.cloneState(prediction.before),
+      after: this.cloneState(prediction.after),
+      changedSlots: new Set(prediction.changedSlots ?? prediction.after?.changedSlots ?? []),
+      changedContainers: prediction.changedContainers ?? prediction.after?.changedContainers ?? {},
+      cursorChanged: prediction.cursorChanged ?? prediction.after?.cursorChanged ?? false,
+      responses: new Map()
+    }
+    for (const request of requests) this.pendingTransactions.set(request.request_id, transaction)
+    this.applyPredictedState(transaction.after)
+    return transaction
+  }
+
+  transactionForResponse (response) {
+    return this.pendingTransactions.get(response?.request_id)
+  }
+
+  shouldDeferResponse (response) {
+    return this.pendingTransactions.has(response?.request_id)
+  }
+
+  noteResponse (response) {
+    const transaction = this.transactionForResponse(response)
+    if (!transaction) return null
+    transaction.responses.set(response.request_id, response)
+    return transaction
+  }
+
+  transactionComplete (transaction) {
+    return transaction.requests.every(request => transaction.responses.has(request.request_id))
+  }
+
+  reconcileTransaction (transaction) {
+    const mismatches = []
+    const slotsToApply = new Set(transaction.changedSlots)
+    const finalState = this.cloneState(transaction.after)
+
+    for (const request of transaction.requests) {
+      const response = transaction.responses.get(request.request_id)
+      if (!response || !itemStackResponseOk(response)) {
+        this.rollbackTransaction(transaction, response, 'server rejected request')
+        const err = new Error(`Inventory prediction failed for request ${request.request_id}: server rejected request`)
+        err.request = request
+        err.response = response
+        err.mismatches = []
+        throw err
+      }
+      this.applyResponseSlots(finalState, response, transaction.before, slotsToApply, mismatches)
+    }
+
+    this.applyPredictedState(finalState)
+    this.applyPredictedSlotsToBot(slotsToApply)
+    for (const request of transaction.requests) this.pendingTransactions.delete(request.request_id)
+    if (mismatches.length > 0) {
+      const err = new Error(`Inventory prediction failed for request ${transaction.request.request_id}: server state differed from prediction`)
+      err.request = transaction.request
+      err.response = [...transaction.responses.values()]
+      err.mismatches = mismatches
+      throw err
+    }
+    return { changedSlots: [...slotsToApply], mismatches }
+  }
+
+  rollbackTransaction (transaction) {
+    for (const request of transaction.requests) this.pendingTransactions.delete(request.request_id)
+    this.syncFromBot(true)
+    this.cursor = cloneStack(transaction.before.cursor)
+  }
+
+  applyResponseSlots (state, response, before, slotsToApply, mismatches) {
+    for (const container of response?.containers || []) {
+      const containerId = container.slot_type?.container_id
+      for (const serverSlot of container.slots || []) {
+        const slotInfo = { slot_type: { container_id: containerId }, slot: serverSlot.slot }
+        const expected = getPredictedRef(state, slotInfo)
+        if ((expected?.count ?? 0) !== serverSlot.count) {
+          const label = containerId === 'cursor' ? 'cursor' : (isPlayerContainer(containerId) ? `slot ${slotIndexForStackRequest(slotInfo, state)}` : `${containerId} ${serverSlot.slot}`)
+          mismatches.push(`${label}: predicted ${expected?.count ?? 0}, server ${serverSlot.count}`)
+        }
+        const fallback = getPredictedRef(before, slotInfo)
+        setPredictedRef(state, slotInfo, serverSlot.count === 0 ? null : setStackId(cloneStack(expected || fallback, serverSlot.count), itemStackIdFromServerSlot(serverSlot)))
+        if (isPlayerContainer(containerId)) slotsToApply.add(slotIndexForStackRequest(slotInfo, state))
+      }
+    }
+  }
+
+  applyPredictedState (state) {
+    this.slots = cloneSlots(state.slots)
+    this.cursor = cloneStack(state.cursor)
+    this.windows = cloneWindowMap(state.windows)
+    this.activeWindowId = state.activeWindowId
+    this.activeWindow = cloneWindow(state.activeWindow ?? this.windows.get(this.activeWindowId))
+    this.uiSlots = cloneSlotMap(state.uiSlots)
+    this.armor = cloneSlots(state.armor)
+    this.offhand = cloneSlots(state.offhand)
+    this.craftingInput = cloneSlots(state.craftingInput)
+    this.creativeOutput = cloneSlots(state.creativeOutput)
+    this.publishPrediction(state)
+  }
+
+  publishPrediction (state = this.stateView()) {
+    this.emit('updated', this.snapshot(), state)
+  }
+
+  applyPredictedSlotsToBot (slots) {
+    if (!this.botState?.inventory) return
+    for (const slot of slots) this.botState.inventory.updateSlot(slot, cloneStack(this.slots[slot]))
+  }
+
+  cloneState (state) {
+    return {
+      slots: cloneSlots(state.slots),
+      cursor: cloneStack(state.cursor),
+      windows: cloneWindowMap(state.windows),
+      activeWindowId: state.activeWindowId,
+      activeWindow: cloneWindow(state.activeWindow),
+      uiSlots: cloneSlotMap(state.uiSlots),
+      armor: cloneSlots(state.armor),
+      offhand: cloneSlots(state.offhand),
+      craftingInput: cloneSlots(state.craftingInput),
+      creativeOutput: cloneSlots(state.creativeOutput)
+    }
+  }
+}
+
+function isPlayerContainer (containerId) {
+  return containerId === 'inventory' || containerId === 'hotbar' || containerId === 'hotbar_and_inventory'
+}
+
+function itemStackResponseOk (response) {
+  return response?.status === 'ok' || response?.status === 0
+}
+
+function mergeChangedContainers (items) {
+  const out = {}
+  for (const item of items) {
+    for (const [containerId, slots] of Object.entries(item || {})) {
+      out[containerId] ??= []
+      for (const slot of slots) if (!out[containerId].includes(slot)) out[containerId].push(slot)
+    }
+  }
+  return out
+}
+
 // ------------------------------------------------------------------
 // Click types (mirrors azalea-buf AzBuf enum)
 // ------------------------------------------------------------------
@@ -554,7 +1097,14 @@ function simulateClick (window, operation, carriedItem, isCreative) {
 // Exports
 // ------------------------------------------------------------------
 module.exports = {
+  InventorySimulationState,
   simulateClick,
+  simulateStackRequest,
+  simulateStackRequestAction,
+  cloneStack,
+  cloneSlots,
+  setStackId,
+  stackId,
   ClickType,
   buttonNum,
   menuLocationForWindow
