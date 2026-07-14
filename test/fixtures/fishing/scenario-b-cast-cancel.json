@@ -1,0 +1,91 @@
+{
+  "name": "Scenario B - cast and explicit cancellation before bite",
+  "description": "Hand-authored from the TASK-32 Verified Wire Reference (verified five times live): cast, owned-hook association, cast acknowledgement, tease-only progress with no fish_hook_hook, then a local stopFishing() that sends exactly one reel/cancel use sequence. The server answers with remove_entity plus the use acknowledgement pair and nothing else: no add_item_entity, no xp orbs, no durability change. The pending fish() rejects with the exact Mineflayer-compatible message 'Fishing cancelled'.",
+  "notes": [
+    "The cancel acknowledgement pair arrives AFTER the hook removal (same tick); the session has already settled by then and must ignore it without leaking listeners.",
+    "Tick provenance: reel/cancel transactions tick N with the start_using_item pulse on N+1/N+2; remove_entity + acknowledgement 2-3 ticks after the reel.",
+    "Negative space: no take_item_entity, no fish_hook_bubble, and no bite sound/particle packet appears in this fixture."
+  ],
+  "steps": [
+    { "op": "fish" },
+    { "op": "expectPhases", "phases": ["casting", "waiting_for_hook"] },
+    { "op": "expectServerbound", "packets": ["animate:useitem", "inventory_transaction:click_air"] },
+    { "op": "authTick", "expectStartUsingItem": true },
+    { "op": "authTick", "expectStartUsingItem": false },
+    { "op": "clientbound", "name": "add_entity", "params": {
+      "entity_type": "minecraft:fishing_hook",
+      "unique_id": "$id:hookUniqueId",
+      "runtime_id": "$id:hookRuntimeId",
+      "position": { "x": 20.496, "y": 2.242, "z": 1.65 },
+      "velocity": { "x": -0.024, "y": -0.955, "z": 0.881 },
+      "yaw": 0,
+      "pitch": 0,
+      "attributes": [],
+      "metadata": [
+        { "key": "owner_eid", "type": "long", "value": "$id:selfUniqueId" },
+        { "key": "target_eid", "type": "long", "value": "$bigint:0" },
+        { "key": "fish_x", "type": "float", "value": 0 },
+        { "key": "fish_z", "type": "float", "value": 0 },
+        { "key": "fish_angle", "type": "float", "value": 0 },
+        { "key": "heartbeat_sound_event", "type": "int", "value": 599 }
+      ]
+    } },
+    { "op": "expectEvent", "event": "fishingHookSpawned", "count": 1 },
+    { "op": "expectState", "state": {
+      "phase": "waiting_for_bite",
+      "hookRuntimeId": "$id:hookRuntimeId",
+      "hookUniqueId": "$id:hookUniqueId",
+      "ownerMatch": "metadata"
+    } },
+    { "op": "clientbound", "name": "completed_using_item", "params": { "used_item_id": "$rodNetworkId", "use_method": -1 } },
+    { "op": "clientbound", "name": "inventory_transaction", "params": {
+      "transaction": {
+        "legacy": { "legacy_request_id": 0 },
+        "transaction_type": "item_release",
+        "actions": [],
+        "transaction_data": {
+          "action_type": "consume",
+          "hotbar_slot": 0,
+          "held_item": { "network_id": "$rodNetworkId", "count": 1, "metadata": 0 },
+          "head_pos": { "x": 20.5, "y": 2.62, "z": 1.5 }
+        }
+      }
+    } },
+    { "op": "clientbound", "name": "entity_event", "params": { "runtime_entity_id": "$id:hookRuntimeId", "event_id": "fish_hook_tease", "data": 0 } },
+    { "op": "clientbound", "name": "set_entity_data", "params": {
+      "runtime_entity_id": "$id:hookRuntimeId",
+      "metadata": [
+        { "key": "fish_x", "type": "float", "value": 18.71 },
+        { "key": "fish_z", "type": "float", "value": 2.83 }
+      ]
+    } },
+    { "op": "expectEvent", "event": "fishingHookUpdated", "count": 1 },
+    { "op": "expectNoEvent", "event": "fishingBite" },
+    { "op": "stopFishing" },
+    { "op": "expectServerbound", "packets": ["animate:useitem", "inventory_transaction:click_air"] },
+    { "op": "authTick", "expectStartUsingItem": true },
+    { "op": "authTick", "expectStartUsingItem": false },
+    { "op": "clientbound", "name": "remove_entity", "params": { "entity_id_self": "$id:hookUniqueId" } },
+    { "op": "clientbound", "name": "completed_using_item", "params": { "used_item_id": "$rodNetworkId", "use_method": -1 } },
+    { "op": "clientbound", "name": "inventory_transaction", "params": {
+      "transaction": {
+        "legacy": { "legacy_request_id": 0 },
+        "transaction_type": "item_release",
+        "actions": [],
+        "transaction_data": {
+          "action_type": "consume",
+          "hotbar_slot": 0,
+          "held_item": { "network_id": "$rodNetworkId", "count": 1, "metadata": 0 },
+          "head_pos": { "x": 20.5, "y": 2.62, "z": 1.5 }
+        }
+      }
+    } },
+    { "op": "expectRejected", "message": "Fishing cancelled", "code": "ERR_FISHING_CANCELLED" },
+    { "op": "awaitStop" },
+    { "op": "expectNoEvent", "event": "fishingCatch" },
+    { "op": "expectEvent", "event": "fishingStopped", "count": 1, "status": "cancelled" },
+    { "op": "expectPhase", "phase": "idle" },
+    { "op": "expectNoServerbound" },
+    { "op": "expectPhases", "phases": ["casting", "waiting_for_hook", "waiting_for_bite", "cancelled", "idle"] }
+  ]
+}

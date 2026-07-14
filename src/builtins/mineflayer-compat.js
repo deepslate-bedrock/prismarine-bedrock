@@ -592,6 +592,11 @@ function createMineflayerFacade (botState) {
       if (prop === 'equip') return (item, destination) => equipCompat(target, item, destination)
       if (prop === 'unequip') return destination => unequipCompat(target, destination)
       if (prop === 'getEquipmentDestSlot') return destination => getEquipmentDestSlotCompat(target, destination)
+      if (prop === 'fish') {
+        return async () => {
+          await target.fish()
+        }
+      }
       if (prop === 'placeBlock') return (referenceBlock, faceVector) => placeBlockCompat(target, referenceBlock, faceVector)
       if (prop === '_placeBlockWithOptions') return (referenceBlock, faceVector, options) => placeBlockWithOptionsCompat(target, referenceBlock, faceVector, options)
       if (prop === 'physics') return target.physics || getPathfinderPhysics(target) || createSimplePhysicsShim(target)

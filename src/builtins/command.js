@@ -9,7 +9,7 @@ const { logAction } = require('../utils')
 module.exports = function commandsPlugin (botState, options = {}) {
   const client = botState.client
 
-  let commandVersion = options.commandVersion ?? '52'
+  let commandVersion = options.commandVersion ?? 'latest'
   let commandTimeoutMs = options.commandTimeoutMs ?? 5000
   let commandPacket = options.commandPacket ?? process.env.E2E_BEDROCK_COMMAND_PACKET ?? 'command_request'
   let seq = 0
@@ -29,7 +29,7 @@ module.exports = function commandsPlugin (botState, options = {}) {
   function commandOrigin (requestId = '', type = 'player') {
     return {
       type,
-      uuid: client.profile?.uuid ?? crypto.randomUUID(),
+      uuid: client.profile?.uuid ?? '',
       request_id: requestId,
       player_entity_id: client.entityId ?? 0n
     }

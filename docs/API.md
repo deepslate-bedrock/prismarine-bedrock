@@ -561,6 +561,124 @@ for emote, food, flight, environment, and related event details.
 | `bot.canAlwaysEat` | `canAlwaysEat(item)` | boolean | True for food that can be eaten at full hunger. |
 | `bot.usingHeldItem` | property | boolean | Set while an item use is active. |
 
+## Fishing
+
+Packet-accurate Bedrock 1.26.10 fishing with a cancellable session state
+machine. Strict TypeScript declarations for this surface ship with the package
+(`types/index.d.ts`, re-exported from `types/fishing.d.ts`).
+
+| API | Maturity | Signature | Returns | Side effects and failures |
+| --- | --- | --- | --- | --- |
+| `bot.fish` | `partial` | `async fish(options?)` | `FishingResult` | Casts the held rod, associates the player-owned hook, waits for a bite, reels, and resolves only after the server outcome is known: `{ outcome: 'caught' \| 'missed', hook, itemEntity, item, experienceEntities, startedAt, completedAt }`. Throws `FishingPreconditionError` before the cast (no client/self/inventory/held rod), rejects `FishingCancelledError` on cancellation and `FishingTimeoutError` on hook-spawn/bite/reel-ack window expiry. A second `fish()` call cancels and settles the first session before casting. |
+| `bot.stopFishing` | `partial` | `async stopFishing(reason?)` | `void` | Idempotent. While a hook exists and no reel was sent, sends exactly one reel/cancel use sequence, waits briefly for hook removal, then rejects the pending `fish()` with `FishingCancelledError`. Stopping before hook spawn only clears pending listeners. Repeated stops never reel twice. |
+| `bot.fishingState` | `partial` | property | `FishingState` | Read-only frozen snapshot: `phase`, `hookRuntimeId`, `hookUniqueId`, `ownerMatch` (`'metadata'` or `'spawn_window'`), live `fishX`/`fishZ`/`fishAngle`/`targetEid` metadata, `startedAt`, `updatedAt`. |
+| `bot.isFishing` | `partial` | property | boolean | True while a session is active (outside idle/terminal cleanup). |
+
+Phases: `idle -> casting -> waiting_for_hook -> waiting_for_bite -> reeling ->
+completed | cancelled | failed -> idle`, one active session per bot.
+
+Options (per call, defaults in parentheses; `bot` option `fishing` sets base
+defaults): `signal`, `hookSpawnTimeoutMs` (5000), `biteTimeoutMs` (60000),
+`reelAckTimeoutMs` (5000), `catchCorrelationTimeoutMs` (2000),
+`translatedBiteEnabled` (true), `translatedBiteMinAgeMs` (1000),
+`translatedBiteVelocityThreshold` (-0.15).
+
+### Packet authority
+
+- Cast and reel are the same held-item-use sequence within one tick:
+  `inventory_transaction item_use/click_block` (only when the crosshair ray
+  hits a block), `animate` with `swing_source: 'useitem'`, then
+  `item_use/click_air`, followed by a one-tick
+  `player_auth_input.input_data.start_using_item` pulse. The `click_block`
+  step and the pulse are vanilla-client parity; BDS functionally accepts a
+  bare `animate + click_air`, but the parity form is the only one emitted.
+- The hook is associated by `add_entity` with
+  `entity_type: minecraft:fishing_hook` and metadata `owner_eid` equal to the
+  bot's unique entity id — never by proximity. If `owner_eid` is absent or 0
+  (some translation layers omit it), the first hook spawned inside the
+  hook-spawn window is associated and `fishingState.ownerMatch` reports
+  `'spawn_window'`.
+- On BDS the only authoritative bite signal is
+  `entity_event(fish_hook_hook)` for the owned hook, matched by the protocol
+  library's string event names (the raw uint8 ids shift across game
+  versions). `fish_hook_tease`/`fish_hook_position` are progress;
+  `fish_hook_bubble` never fired in captures and is never required.
+- Geyser does not synthesize `fish_hook_hook`; Java signals the bite by
+  forcing the bobber sharply downward, surfaced as `set_entity_motion`. The
+  translated-bite fallback (enabled by default) accepts
+  `velocity.y <= translatedBiteVelocityThreshold` after
+  `translatedBiteMinAgeMs`; `fish_hook_hook` always wins when both exist.
+- A catch is classified only by `add_item_entity` with
+  `is_from_fishing: true` inside the catch-correlation window within 1.5
+  blocks **horizontal** distance of the removed hook (the item spawns 1-2
+  blocks below the surface, so 3D distance would reject real catches). XP
+  orbs spawn at the player with `owner_eid: -1` and attach by burst adjacency
+  only; they are never required evidence.
+- **Geyser catch degradation (pinned from source):** Geyser hard-codes
+  `is_from_fishing: false` on every item spawn
+  (`core/.../entity/type/ItemEntity.java`, `setFromFishing(false)`), so the
+  authoritative discriminator can never fire through Geyser and catch
+  classification on that target is **`missed`-only** — a real Java-side catch
+  still resolves `fish()` successfully, just as `missed`. This is a
+  documented degradation, never reinterpreted from other signals. (Geyser
+  also spawns the loot item just before the hook removal, the reverse of the
+  BDS same-tick order.)
+- Every accepted rod use is acknowledged by BDS with `completed_using_item`
+  plus a clientbound `inventory_transaction` (`item_release`/`consume`); the
+  session consumes both and never synthesizes them. The cast acknowledgement
+  doubles as an ack-capability probe: on targets that acknowledge uses (BDS),
+  the reel outcome resolves only after the reel acknowledgement pair arrived
+  (bounded by `reelAckTimeoutMs`); targets that never translate the
+  acknowledgements (Geyser) classify on hook removal plus the correlation
+  window alone.
+- A missed reel produces no `add_item_entity` at all; classification rests on
+  window expiry. Rod durability is server-authoritative (reel ack
+  `held_item.Damage` plus inventory refresh) and is never predicted.
+- Pickup semantics: `add_item_entity` is the catch evidence. Pickup on BDS
+  1.26.10 emits **no `take_item_entity` packet** — only `remove_entity` of
+  the item plus an inventory refresh, ~26 ticks later — and is outside the
+  fishing session; `fish()` never waits for it.
+
+### Cancellation semantics
+
+All exits settle exactly once and remove every packet/bot listener, timer,
+and transient auth flag. Cancellation sources: explicit `stopFishing()`, a
+replacement `fish()` call, owned hook removal before a successful reel,
+disconnect/kick/end, the held item/slot becoming invalid at any point before
+the reel (switching away from the rod rejects with
+`Fishing cancelled: held item is no longer a fishing rod`; changes after the
+reel are ignored because the outcome is already server-side), and the bounded
+timeouts. Typed errors carry literal codes: `FishingCancelledError`
+(`ERR_FISHING_CANCELLED`), `FishingTimeoutError` (`ERR_FISHING_TIMEOUT`),
+`FishingPreconditionError` (`ERR_FISHING_PRECONDITION`); the classes are
+exported from the package root.
+
+Rejection-message contract (downstream Mineflayer plugins match on text):
+every cancellation message begins with `Fishing cancelled`. Hook removal and
+explicit stop reject with exactly `Fishing cancelled`; a replacement call
+rejects the first promise with exactly
+`Fishing cancelled due to calling bot.fish() again`; other sources append a
+suffix (for example `Fishing cancelled: connection closed`).
+
+### Mineflayer proxy contract
+
+`bot.mineflayer.fish` and `bot.asMineflayerBot().fish` implement the exact
+Mineflayer signature `fish(): Promise<void>` through an explicit adapter (one
+native call, result erased). Successful completion — **caught or missed** —
+resolves `undefined`; rejections preserve the native error object and the
+message contract above. Deliberate timing deviation: upstream Mineflayer
+resolves the moment it reels after a bite and never waits for the caught
+item; this package resolves a few ticks later, after outcome classification.
+Do not "fix" the proxy to early-resolve.
+
+### Deviations from the sibling TypeScript implementation
+
+Consumers porting between the packages should map: `stopFishing()` replaces
+`cancelFishing()` (richer, promise-returning), the `fishingBite` event
+replaces `fishBite` (consistent event prefix), `fishingState` replaces the
+bare `fishingHook` field, and `fish()` resolves after outcome classification
+instead of at reel time.
+
 ## Flight
 
 See [`docs/reference/emotes-food-flight-environment.md`](reference/emotes-food-flight-environment.md)
@@ -659,6 +777,7 @@ The native bot exposes Bedrock-first `Map` state. `bot.mineflayer` and
 | `facade.equip(item, destination)` | `compat` | function | Adapts Mineflayer equip to Bedrock inventory helpers where supported. |
 | `facade.unequip(destination)` | `compat` | function | Supported only for destinations backed by current Bedrock actions. |
 | `facade.getEquipmentDestSlot(destination)` | `compat` | function | Maps supported Mineflayer equipment destinations. |
+| `facade.fish()` | `compat` | function | Explicit adapter, not generic passthrough: `Promise<void>` per the Mineflayer contract. Resolves after the native outcome classification for both caught and missed; rejections keep native identity and `Fishing cancelled…` messages. See the Fishing section. |
 | `facade.placeBlock(referenceBlock, faceVector)` | `compat` | function | Adapts Mineflayer placement signature to native `placeBlock`. |
 | `facade._placeBlockWithOptions(referenceBlock, faceVector, options)` | `compat` | function | Compat placement with options. |
 | `facade.physics` | `compat` | property | Pathfinder physics shim where available. |
@@ -684,7 +803,14 @@ events below are higher-level built-in events emitted by `bot`.
 | `entityRemoved` | `stable` | entity | entities |
 | `itemPickup` | `partial` | pickup payload | entities |
 | `entityEvent` | `partial` | entity, event id, data | entities |
+| `entityDataUpdated` | `partial` | entity, `set_entity_data` packet | entities |
 | `entityAction` | `partial` | entity, action, packet | entities |
+| `fishingStateChanged` | `partial` | previous snapshot, current snapshot | fishing (every observable phase transition) |
+| `fishingHookSpawned` | `partial` | owned hook entity | fishing (correct player-owned hook associated) |
+| `fishingHookUpdated` | `partial` | hook entity, `{ fishX, fishZ, fishAngle, targetEid }` | fishing (pre-bite approach: `fishX`/`fishZ` decay toward 0 as a "bite imminent" signal) |
+| `fishingBite` | `partial` | hook entity, `{ source: 'entity_event' \| 'translated_motion', runtimeEntityId, velocityY }` | fishing |
+| `fishingCatch` | `partial` | `{ hook, itemEntity, item, experienceEntities }` | fishing (server created a caught item entity) |
+| `fishingStopped` | `partial` | `{ status: 'completed', result, error: null }` or `{ status: 'cancelled' \| 'failed', result: null, error }` | fishing (session settled, cleanup done) |
 | `entityEffect` | `partial` | entity, packet | entities |
 | `entityMovementEffect` | `partial` | entity, packet | entities |
 | `flightChanged` | `stable` | flight state with previous/entity/reason/packet | entities/flight |
