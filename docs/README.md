@@ -25,6 +25,7 @@ const bot = createBot({
 - [API reference](API.md)
 - [Example plugin](https://github.com/deepslate-bedrock/bedrock-example-plugin)
 - [Chat and commands](reference/chat-and-commands.md)
+- [Bedrock forms](reference/forms.md)
 - [Auth input and movement](reference/auth-input-and-movement.md)
 - [World and entities](reference/world-and-entities.md)
 - [Inventory and actions](reference/inventory-and-actions.md)

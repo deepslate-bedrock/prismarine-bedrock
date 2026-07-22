@@ -24,6 +24,7 @@ detail for individual built-ins and related built-in groups:
 | Built-in area | Reference sheet |
 | --- | --- |
 | Chat and commands | [`chat-and-commands.md`](reference/chat-and-commands.md) |
+| Bedrock forms | [`forms.md`](reference/forms.md) |
 | Auth input, controls, and movement | [`auth-input-and-movement.md`](reference/auth-input-and-movement.md) |
 | World, chunks, entities, and players | [`world-and-entities.md`](reference/world-and-entities.md) |
 | Inventory and item stack requests | [`inventory-and-actions.md`](reference/inventory-and-actions.md) |
@@ -179,6 +180,7 @@ login/spawn.
 | `bot.lifecycle` | `partial` | Respawn/death state including `isDead`, timers, and last respawn position. |
 | `bot.environment` | `partial` | Time/weather mirror. Use `getEnvironment()` for a copied snapshot. |
 | `bot.scoreboards` | `partial` | Bedrock scoreboard mirror with `objectives`, `displaySlots`, `scores`, and `identities` maps. |
+| `bot.forms` | `stable` | Native Bedrock form state and helpers. Includes pending forms, wait/select/respond/cancel methods, server settings, and close-stack handling. |
 | `bot.chunkState` | `partial` | Chunk publisher center/radius and count state. |
 | `bot.protocolState` | `partial` | Protocol feature flags such as runtime id palette mode. |
 | `bot.creativeItems` | `partial` | Raw creative content entries after `creative_content`. |
