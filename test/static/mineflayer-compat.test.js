@@ -270,3 +270,118 @@ describe('mineflayer compatibility facade', function () {
     ])
   })
 })
+
+describe('mineflayer fishing proxy contract', function () {
+  this.timeout(10000)
+
+  const {
+    createFishingBot,
+    caughtItemPacket,
+    entityEventPacket,
+    hookSpawnPacket,
+    removeEntityPacket
+  } = require('../helpers/fishing')
+  const injectFishing = require('../../src/builtins/fishing')
+  const { FishingCancelledError } = injectFishing
+
+  it('erases the FishingResult: Promise<void> for both caught and missed outcomes', async function () {
+    const state = createCompatState()
+    const calls = []
+    const results = [
+      { outcome: 'caught', item: { name: 'cod' } },
+      { outcome: 'missed', item: null }
+    ]
+    state.fish = async () => {
+      calls.push('fish')
+      return results[calls.length - 1]
+    }
+
+    mineflayerCompatPlugin(state)
+    const bot = state.asMineflayerBot()
+
+    // One native call per proxy invocation, undefined for both outcomes.
+    assert.strictEqual(await bot.fish(), undefined)
+    assert.strictEqual(await bot.fish(), undefined)
+    assert.deepStrictEqual(calls, ['fish', 'fish'])
+  })
+
+  it('exposes the same adapter behavior through bot.mineflayer and asMineflayerBot()', async function () {
+    const state = createCompatState()
+    state.fish = async () => ({ outcome: 'caught' })
+    mineflayerCompatPlugin(state)
+
+    assert.strictEqual(state.mineflayer, state.asMineflayerBot())
+    assert.strictEqual(typeof state.mineflayer.fish, 'function')
+    assert.strictEqual(await state.mineflayer.fish(), undefined)
+    assert.strictEqual(await state.asMineflayerBot().fish(), undefined)
+  })
+
+  it('preserves native rejection identity and messages', async function () {
+    const state = createCompatState()
+    const nativeError = new FishingCancelledError('Fishing cancelled')
+    state.fish = async () => {
+      throw nativeError
+    }
+    mineflayerCompatPlugin(state)
+
+    await assert.rejects(state.mineflayer.fish(), error => {
+      assert.strictEqual(error, nativeError, 'the rejection object must pass through unchanged')
+      assert.strictEqual(error.message, 'Fishing cancelled')
+      assert.strictEqual(error.code, 'ERR_FISHING_CANCELLED')
+      return true
+    })
+  })
+
+  it('resolves only after outcome classification against the real fishing builtin', async function () {
+    const botState = createFishingBot()
+    mineflayerCompatPlugin(botState)
+    const bot = botState.asMineflayerBot()
+
+    let settled = false
+    const promise = bot.fish().then(value => {
+      settled = true
+      return value
+    })
+
+    botState.client.emit('add_entity', hookSpawnPacket())
+    botState.client.emit('entity_event', entityEventPacket('fish_hook_hook'))
+    assert.strictEqual(settled, false, 'reeling alone must not resolve the proxy promise')
+
+    botState.client.emit('remove_entity', removeEntityPacket())
+    botState.client.emit('add_item_entity', caughtItemPacket())
+
+    assert.strictEqual(await promise, undefined)
+  })
+
+  it('applies second-call cancellation semantics through the proxy', async function () {
+    const botState = createFishingBot()
+    mineflayerCompatPlugin(botState)
+    const bot = botState.asMineflayerBot()
+
+    const first = bot.fish()
+    botState.client.emit('add_entity', hookSpawnPacket())
+
+    const second = bot.fish()
+    botState.client.emit('remove_entity', removeEntityPacket())
+
+    await assert.rejects(first, error => {
+      assert.strictEqual(error.message, 'Fishing cancelled due to calling bot.fish() again')
+      return true
+    })
+
+    await botState.stopFishing()
+    await second.catch(() => {})
+  })
+
+  it('does not duplicate listeners across facade accesses', function () {
+    const botState = createFishingBot()
+    mineflayerCompatPlugin(botState)
+
+    const before = botState.client.listenerCount('set_entity_motion')
+    for (let i = 0; i < 5; i++) {
+      assert.strictEqual(typeof botState.mineflayer.fish, 'function')
+      botState.asMineflayerBot()
+    }
+    assert.strictEqual(botState.client.listenerCount('set_entity_motion'), before)
+  })
+})

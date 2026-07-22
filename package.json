@@ -3,12 +3,20 @@
   "version": "0.0.1",
   "description": "Bedrock-first bot runtime built on the Prismarine ecosystem.",
   "main": "index.js",
+  "types": "types/index.d.ts",
   "exports": {
-    ".": "./index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./index.js"
+    },
+    "./types": {
+      "types": "./types/index.d.ts"
+    }
   },
   "scripts": {
     "test": "pnpm run test:static",
     "test:static": "node scripts/run-static-tests.js",
+    "test:types": "tsc -p test/types/tsconfig.json",
     "test:static:core": "mocha --ignore \"test/static/physics/**/*.test.js\" \"test/static/**/*.test.js\"",
     "test:static:physics": "node scripts/run-static-physics-fixtures.js && mocha --parallel \"test/static/physics/*.test.js\"",
     "test:fake-world": "mocha \"test/fake-world/**/*.test.js\"",
@@ -51,6 +59,8 @@
     "vec3": "^0.2.0"
   },
   "devDependencies": {
-    "mocha": "^11.7.5"
+    "@types/node": "^22.20.1",
+    "mocha": "^11.7.5",
+    "typescript": "^5.9.3"
   }
 }

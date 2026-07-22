@@ -1,0 +1,127 @@
+{
+  "name": "Scenario D - other players' hooks and unrelated drops",
+  "description": "Hand-authored from the TASK-32 Verified Wire Reference ownership rules: a hook whose present owner_eid mismatches self must never be associated - even when it spawned first, inside the fallback window - and its fish_hook_hook must not reel or emit fishingBite. After the own hook's bite and reel, an is_from_fishing item OUTSIDE the 1.5-block horizontal bound and a non-fishing item INSIDE the bound must both be rejected by catch correlation, resolving the session as missed.",
+  "notes": [
+    "Ownership matching is primary: the spawn-window fallback applies only when owner_eid is absent or 0, never when it is present and mismatched.",
+    "The other player's hook stays in normal world entity state after the session settles; it is only excluded from the fishing session.",
+    "Catch correlation is horizontal-only (the real item spawns below the surface) and requires is_from_fishing=true inside the window AND within 1.5 blocks XZ of the removed hook.",
+    "Negative space: no take_item_entity, no fish_hook_bubble, and no bite sound/particle packet appears in this fixture."
+  ],
+  "steps": [
+    { "op": "fish", "options": { "catchCorrelationTimeoutMs": 200 } },
+    { "op": "expectPhases", "phases": ["casting", "waiting_for_hook"] },
+    { "op": "expectServerbound", "packets": ["animate:useitem", "inventory_transaction:click_air"] },
+    { "op": "authTick", "expectStartUsingItem": true },
+    { "op": "authTick", "expectStartUsingItem": false },
+    { "op": "clientbound", "name": "add_entity", "params": {
+      "entity_type": "minecraft:fishing_hook",
+      "unique_id": "$id:otherHookUniqueId",
+      "runtime_id": "$id:otherHookRuntimeId",
+      "position": { "x": 24.5, "y": 2.242, "z": 5.65 },
+      "velocity": { "x": 0, "y": -0.955, "z": 0.5 },
+      "yaw": 0,
+      "pitch": 0,
+      "attributes": [],
+      "metadata": [
+        { "key": "owner_eid", "type": "long", "value": "$id:otherPlayerUniqueId" },
+        { "key": "target_eid", "type": "long", "value": "$bigint:0" },
+        { "key": "fish_x", "type": "float", "value": 0 },
+        { "key": "fish_z", "type": "float", "value": 0 },
+        { "key": "fish_angle", "type": "float", "value": 0 },
+        { "key": "heartbeat_sound_event", "type": "int", "value": 599 }
+      ]
+    } },
+    { "op": "expectNoEvent", "event": "fishingHookSpawned" },
+    { "op": "expectState", "state": { "phase": "waiting_for_hook", "hookRuntimeId": null, "hookUniqueId": null, "ownerMatch": null } },
+    { "op": "clientbound", "name": "add_entity", "params": {
+      "entity_type": "minecraft:fishing_hook",
+      "unique_id": "$id:hookUniqueId",
+      "runtime_id": "$id:hookRuntimeId",
+      "position": { "x": 20.496, "y": 2.242, "z": 1.65 },
+      "velocity": { "x": -0.024, "y": -0.955, "z": 0.881 },
+      "yaw": 0,
+      "pitch": 0,
+      "attributes": [],
+      "metadata": [
+        { "key": "owner_eid", "type": "long", "value": "$id:selfUniqueId" },
+        { "key": "target_eid", "type": "long", "value": "$bigint:0" },
+        { "key": "fish_x", "type": "float", "value": 0 },
+        { "key": "fish_z", "type": "float", "value": 0 },
+        { "key": "fish_angle", "type": "float", "value": 0 },
+        { "key": "heartbeat_sound_event", "type": "int", "value": 599 }
+      ]
+    } },
+    { "op": "expectEvent", "event": "fishingHookSpawned", "count": 1 },
+    { "op": "expectState", "state": {
+      "phase": "waiting_for_bite",
+      "hookRuntimeId": "$id:hookRuntimeId",
+      "hookUniqueId": "$id:hookUniqueId",
+      "ownerMatch": "metadata"
+    } },
+    { "op": "clientbound", "name": "completed_using_item", "params": { "used_item_id": "$rodNetworkId", "use_method": -1 } },
+    { "op": "clientbound", "name": "inventory_transaction", "params": {
+      "transaction": {
+        "legacy": { "legacy_request_id": 0 },
+        "transaction_type": "item_release",
+        "actions": [],
+        "transaction_data": {
+          "action_type": "consume",
+          "hotbar_slot": 0,
+          "held_item": { "network_id": "$rodNetworkId", "count": 1, "metadata": 0 },
+          "head_pos": { "x": 20.5, "y": 2.62, "z": 1.5 }
+        }
+      }
+    } },
+    { "op": "clientbound", "name": "entity_event", "params": { "runtime_entity_id": "$id:otherHookRuntimeId", "event_id": "fish_hook_hook", "data": 0 } },
+    { "op": "expectNoEvent", "event": "fishingBite" },
+    { "op": "expectPhase", "phase": "waiting_for_bite" },
+    { "op": "expectNoServerbound" },
+    { "op": "clientbound", "name": "entity_event", "params": { "runtime_entity_id": "$id:hookRuntimeId", "event_id": "fish_hook_hook", "data": 0 } },
+    { "op": "expectEvent", "event": "fishingBite", "count": 1, "source": "entity_event" },
+    { "op": "expectPhase", "phase": "reeling" },
+    { "op": "expectServerbound", "packets": ["animate:useitem", "inventory_transaction:click_air"] },
+    { "op": "authTick", "expectStartUsingItem": true },
+    { "op": "authTick", "expectStartUsingItem": false },
+    { "op": "clientbound", "name": "remove_entity", "params": { "entity_id_self": "$id:hookUniqueId" } },
+    { "op": "clientbound", "name": "add_item_entity", "params": {
+      "entity_id_self": "$bigint:-8589934570",
+      "runtime_entity_id": "$bigint:31",
+      "item": { "network_id": "$caughtNetworkId", "count": 1, "metadata": 0 },
+      "position": { "x": 23.5, "y": -0.9, "z": 1.6 },
+      "velocity": { "x": 0, "y": 0.5, "z": 0 },
+      "metadata": [],
+      "is_from_fishing": true
+    } },
+    { "op": "clientbound", "name": "add_item_entity", "params": {
+      "entity_id_self": "$bigint:-8589934571",
+      "runtime_entity_id": "$bigint:32",
+      "item": { "network_id": "$caughtNetworkId", "count": 1, "metadata": 0 },
+      "position": { "x": 20.4, "y": 0.2, "z": 1.6 },
+      "velocity": { "x": 0, "y": 0, "z": 0 },
+      "metadata": [],
+      "is_from_fishing": false
+    } },
+    { "op": "clientbound", "name": "completed_using_item", "params": { "used_item_id": "$rodNetworkId", "use_method": -1 } },
+    { "op": "clientbound", "name": "inventory_transaction", "params": {
+      "transaction": {
+        "legacy": { "legacy_request_id": 0 },
+        "transaction_type": "item_release",
+        "actions": [],
+        "transaction_data": {
+          "action_type": "consume",
+          "hotbar_slot": 0,
+          "held_item": { "network_id": "$rodNetworkId", "count": 1, "metadata": 0 },
+          "head_pos": { "x": 20.5, "y": 2.62, "z": 1.5 }
+        }
+      }
+    } },
+    { "op": "sleep", "ms": 320 },
+    { "op": "expectNoEvent", "event": "fishingCatch" },
+    { "op": "expectResolved", "outcome": "missed", "itemEntity": null, "xpOrbs": 0 },
+    { "op": "expectEvent", "event": "fishingStopped", "count": 1, "status": "completed" },
+    { "op": "expectEntity", "runtimeId": "$id:otherHookRuntimeId" },
+    { "op": "expectPhase", "phase": "idle" },
+    { "op": "expectNoServerbound" },
+    { "op": "expectPhases", "phases": ["casting", "waiting_for_hook", "waiting_for_bite", "reeling", "completed", "idle"] }
+  ]
+}
