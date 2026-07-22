@@ -27,11 +27,13 @@
 const {
   cloneItem,
   itemStackResponseStatusOk,
+  itemStackId,
   itemToRaw,
   logAction,
   maxStackSize,
   parseItemStackResponsePacket,
   responseInventorySlots,
+  responseStackId,
   selfRuntimeEntityId,
   sameItem,
   stackRequestSlotInfo
@@ -40,7 +42,7 @@ const {
 module.exports = function inventoryActionsPlugin (botState, options = {}) {
   const client = botState.client
 
-  let nextRequestId = options.inventoryRequestIdStart ?? 1
+  let nextRequestId = options.inventoryRequestIdStart ?? -1001
   let responseTimeoutMs = options.inventoryResponseTimeoutMs ?? 5000
   let inventoryUpdateTimeoutMs = options.inventoryUpdateTimeoutMs ?? 3000
 
@@ -48,7 +50,9 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   const pendingSlotUpdates = new Set()
 
   function requestId () {
-    return nextRequestId++
+    const id = nextRequestId
+    nextRequestId += id < 0 ? -2 : 1
+    return id
   }
 
   function itemAt (slot) {
@@ -69,6 +73,85 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
   function isHotbarSlot (slot) {
     return slot >= 0 && slot <= 8
+  }
+
+  function playerStackRequestSlotInfo (slot, item = itemAt(slot)) {
+    return {
+      slot_type: { container_id: isHotbarSlot(slot) ? 'hotbar' : 'inventory' },
+      slot,
+      stack_id: itemStackId(item)
+    }
+  }
+
+  function cursorSlotInfo (item = null) {
+    return {
+      slot_type: { container_id: 'cursor' },
+      slot: 0,
+      stack_id: itemStackId(item)
+    }
+  }
+
+  async function openPlayerInventoryForAction () {
+    const activeWindow = typeof botState.getWindow === 'function'
+      ? botState.getWindow(botState.activeWindowId)
+      : null
+    if (activeWindow?.windowType === 'inventory') return null
+
+    const runtimeEntityId = selfRuntimeEntityId(botState)
+    if (runtimeEntityId == null) {
+      throw new Error('Cannot open player inventory before self entity is known')
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error('Timed out waiting for player inventory container_open'))
+      }, inventoryUpdateTimeoutMs)
+
+      function onOpen (packet) {
+        if (packet.window_type !== 'inventory') return
+        cleanup()
+        resolve(packet.window_id)
+      }
+
+      function cleanup () {
+        clearTimeout(timeout)
+        client.off('container_open', onOpen)
+      }
+
+      client.on('container_open', onOpen)
+      client.queue('interact', {
+        action_id: 'open_inventory',
+        target_entity_id: runtimeEntityId,
+        has_position: false
+      })
+    })
+  }
+
+  async function closePlayerInventoryAfterAction (windowId) {
+    if (windowId == null) return
+
+    await new Promise(resolve => {
+      const timeout = setTimeout(cleanup, inventoryUpdateTimeoutMs)
+
+      function onClose (packet) {
+        if (packet.window_id !== windowId) return
+        cleanup()
+      }
+
+      function cleanup () {
+        clearTimeout(timeout)
+        client.off('container_close', onClose)
+        resolve()
+      }
+
+      client.on('container_close', onClose)
+      client.queue('container_close', {
+        window_id: windowId,
+        window_type: 'inventory',
+        server: false
+      })
+    })
   }
 
   function setStackId (item, id) {
@@ -333,10 +416,17 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   async function transactInventory (request, changedSlots) {
-    const id = sendItemStackRequest(request)
-    const response = await waitForItemStackResponse(id)
+    const responsePromise = waitForItemStackResponse(request.request_id)
+    sendStandaloneItemStackRequest(request)
+    const response = await responsePromise
     applyConfirmedRequest(request, response, changedSlots)
     return response
+  }
+
+  async function sendInventoryRequest (request) {
+    const responsePromise = waitForItemStackResponse(request.request_id)
+    sendStandaloneItemStackRequest(request)
+    return responsePromise
   }
 
   function makeRequest (actions) {
@@ -344,7 +434,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       request_id: requestId(),
       actions,
       custom_names: [],
-      cause: 'chat_public'
+      cause: -1
     }
   }
 
@@ -392,14 +482,66 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   async function swapInventorySlots (slotA, slotB) {
-    const source = stackRequestSlotInfo(slotA, itemAt(slotA))
-    const destination = stackRequestSlotInfo(slotB, itemAt(slotB))
+    assertInventorySlot(slotA, 'slotA')
+    assertInventorySlot(slotB, 'slotB')
 
-    const request = makeRequest([
-      swapAction(source, destination)
+    if (slotA === slotB) return null
+
+    const openedWindowId = (!isHotbarSlot(slotA) || !isHotbarSlot(slotB))
+      ? await openPlayerInventoryForAction()
+      : null
+
+    try {
+      return await swapInventorySlotsInOpenWindow(slotA, slotB)
+    } finally {
+      await closePlayerInventoryAfterAction(openedWindowId)
+    }
+  }
+
+  async function swapInventorySlotsInOpenWindow (slotA, slotB) {
+
+    const itemA = cloneItem(itemAt(slotA))
+    const itemB = cloneItem(itemAt(slotB))
+    if (!itemA && !itemB) return null
+    if (!itemB) return moveInventorySlot(slotA, slotB)
+    if (!itemA) return moveInventorySlot(slotB, slotA)
+
+    // Native Bedrock swaps occupied player slots through the cursor in three
+    // separately acknowledged requests: take B, swap cursor with A, place A
+    // back into B. A direct cross-container swap is rejected by BDS.
+    const takeRequest = makeRequest([
+      takeAction(itemB.count, playerStackRequestSlotInfo(slotB, itemB), cursorSlotInfo())
     ])
+    const takeResponse = await sendInventoryRequest(takeRequest)
+    setStackId(itemB, responseStackId(takeResponse, 'cursor', 0, itemB.stackId ?? itemB.stack_id ?? 0))
 
-    return transactInventory(request, [slotA, slotB])
+    const swapRequest = makeRequest([
+      swapAction(cursorSlotInfo(itemB), playerStackRequestSlotInfo(slotA, itemA))
+    ])
+    const swapResponse = await sendInventoryRequest(swapRequest)
+    setStackId(itemB, responseStackId(
+      swapResponse,
+      isHotbarSlot(slotA) ? 'hotbar' : 'inventory',
+      slotA,
+      itemB.stackId ?? itemB.stack_id ?? 0
+    ))
+    setStackId(itemA, responseStackId(swapResponse, 'cursor', 0, itemA.stackId ?? itemA.stack_id ?? 0))
+
+    const placeRequest = makeRequest([
+      placeAction(itemA.count, cursorSlotInfo(itemA), playerStackRequestSlotInfo(slotB, null))
+    ])
+    const placeResponse = await sendInventoryRequest(placeRequest)
+    setStackId(itemA, responseStackId(
+      placeResponse,
+      isHotbarSlot(slotB) ? 'hotbar' : 'inventory',
+      slotB,
+      itemA.stackId ?? itemA.stack_id ?? 0
+    ))
+
+    botState.inventory.updateSlot(slotA, itemB)
+    botState.inventory.updateSlot(slotB, itemA)
+
+    return placeResponse
   }
 
   async function equipItem (slot, hotbarSlot = 0) {
@@ -422,8 +564,8 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   async function moveInventorySlot (fromSlot, toSlot) {
-    const source = stackRequestSlotInfo(fromSlot, itemAt(fromSlot))
-    const destination = stackRequestSlotInfo(toSlot, itemAt(toSlot))
+    const source = playerStackRequestSlotInfo(fromSlot)
+    const destination = playerStackRequestSlotInfo(toSlot)
 
     const request = makeRequest([
       takeAction(itemAt(fromSlot).count, source, destination)
@@ -438,7 +580,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     const count = Math.min(from.count, maxStackSize(to) - to.count)
 
     const request = makeRequest([
-      takeAction(count, stackRequestSlotInfo(fromSlot, from), stackRequestSlotInfo(toSlot, to))
+      takeAction(count, playerStackRequestSlotInfo(fromSlot, from), playerStackRequestSlotInfo(toSlot, to))
     ])
 
     return transactInventory(request, [fromSlot, toSlot])
@@ -448,8 +590,8 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     const from = itemAt(fromSlot)
     const to = itemAt(toSlot)
 
-    const source = stackRequestSlotInfo(fromSlot, from)
-    const destination = stackRequestSlotInfo(toSlot, to)
+    const source = playerStackRequestSlotInfo(fromSlot, from)
+    const destination = playerStackRequestSlotInfo(toSlot, to)
 
     const request = makeRequest([
       takeAction(1, source, destination)
@@ -462,7 +604,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     const count = Math.ceil(itemAt(fromSlot).count / 2)
 
     const request = makeRequest([
-      takeAction(count, stackRequestSlotInfo(fromSlot, itemAt(fromSlot)), stackRequestSlotInfo(toSlot, itemAt(toSlot)))
+      takeAction(count, playerStackRequestSlotInfo(fromSlot), playerStackRequestSlotInfo(toSlot))
     ])
 
     return transactInventory(request, [fromSlot, toSlot])
@@ -470,7 +612,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
   async function dropInventorySlot (slot, randomly = false) {
     const request = makeRequest([
-      dropAction(itemAt(slot).count, stackRequestSlotInfo(slot, itemAt(slot)), randomly)
+      dropAction(itemAt(slot).count, playerStackRequestSlotInfo(slot), randomly)
     ])
 
     return transactInventory(request, [slot])
@@ -478,7 +620,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
   async function dropOneInventoryItem (slot, randomly = false) {
     const request = makeRequest([
-      dropAction(1, stackRequestSlotInfo(slot, itemAt(slot)), randomly)
+      dropAction(1, playerStackRequestSlotInfo(slot), randomly)
     ])
 
     return transactInventory(request, [slot])
@@ -486,7 +628,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
   async function destroyInventorySlot (slot) {
     const request = makeRequest([
-      dropAction(itemAt(slot).count, stackRequestSlotInfo(slot, itemAt(slot)), false)
+      dropAction(itemAt(slot).count, playerStackRequestSlotInfo(slot), false)
     ])
 
     return transactInventory(request, [slot])
@@ -494,7 +636,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
   async function destroyOneInventoryItem (slot) {
     const request = makeRequest([
-      dropAction(1, stackRequestSlotInfo(slot, itemAt(slot)), false)
+      dropAction(1, playerStackRequestSlotInfo(slot), false)
     ])
 
     return transactInventory(request, [slot])
