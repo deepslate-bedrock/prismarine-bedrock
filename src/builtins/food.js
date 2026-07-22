@@ -4,7 +4,6 @@
 const {
   floorVec3,
   itemToRaw,
-  logAction,
   normalizeItemId,
   sleep,
   toVec3f
@@ -62,7 +61,7 @@ function makeUseItemData (botState, slot, item, actionType) {
     block_position: { x: blockPos.x, y: blockPos.y, z: blockPos.z },
     face: -1,
     hotbar_slot: slot,
-    held_item: itemToRaw(item, botState.itemClass),
+    held_item: itemToRaw(item, botState.itemClass, { logAction: botState.logAction }),
     player_pos: toVec3f(playerPos),
     click_pos: { x: 0, y: 0, z: 0 },
     block_runtime_id: 0,
@@ -92,7 +91,7 @@ function makeItemReleasePacket (botState, slot, item) {
       transaction_data: {
         action_type: 'consume',
         hotbar_slot: slot,
-        held_item: itemToRaw(item, botState.itemClass),
+        held_item: itemToRaw(item, botState.itemClass, { logAction: botState.logAction }),
         head_pos: toVec3f(playerPos)
       }
     }
@@ -196,12 +195,12 @@ function inject (botState, options = {}) {
 
   function sendStartUse (slot, item) {
     client.queue('inventory_transaction', makeItemUsePacket(botState, slot, item))
-    logAction('[food]', 'start eating', { slot, item: itemName(item) })
+    botState.logAction?.('[food]', 'start eating', { slot, item: itemName(item) })
   }
 
   function sendReleaseUse (slot, item) {
     client.queue('inventory_transaction', makeItemReleasePacket(botState, slot, item))
-    logAction('[food]', 'release eating', { slot, item: itemName(item) })
+    botState.logAction?.('[food]', 'release eating', { slot, item: itemName(item) })
   }
 
   async function eat (target, eatOptions = {}) {

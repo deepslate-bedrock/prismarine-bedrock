@@ -1,4 +1,4 @@
-const { logAction, nbtValue, sameRuntimeId } = require('../utils');
+const { nbtValue, sameRuntimeId } = require('../utils');
 const { Vec3 } = require('vec3');
 const buildIndexFromArray = require('prismarine-registry/lib/indexer');
 
@@ -155,13 +155,13 @@ module.exports = (botState, options) => {
       runtime_entity_id: client.entityId,
     });
 
-    logAction('[->]', 'available_commands ready handshake', {
+    botState.logAction?.('[->]', 'available_commands ready handshake', {
       runtime_entity_id: String(client.entityId),
     });
   }
 
   client.on('connect_allowed', () => {
-    logAction('[→]', 'connect', { host: options.host, port: options.port });
+    botState.logAction?.('[→]', 'connect', { host: options.host, port: options.port });
   });
 
   client.on('network_stack_latency', (packet) => {
@@ -190,7 +190,7 @@ module.exports = (botState, options) => {
     registry.handleStartGame(pkt);
     loadBlockNetworkRuntimeIds(pkt);
 
-    logAction('[←]', 'start_game', {
+    botState.logAction?.('[←]', 'start_game', {
       entity_id: String(pkt.entity_id),
       runtime_entity_id: String(pkt.runtime_entity_id),
       pos: botState.playerState.spawnPosition,
@@ -204,13 +204,13 @@ module.exports = (botState, options) => {
 
   // ── Item Registry ──
   client.on('item_registry', (packet) => {
-    logAction('[←]', 'item_registry', { count: packet.itemstates.length });
+    botState.logAction?.('[←]', 'item_registry', { count: packet.itemstates.length });
     registry.loadItemStates(packet.itemstates);
   });
 
   // ── Creative Content ──
   client.on('creative_content', (packet) => {
-    logAction('[←]', 'creative_content', {
+    botState.logAction?.('[←]', 'creative_content', {
       groups: packet.groups.length,
       items: packet.items.length,
     });
@@ -228,7 +228,7 @@ module.exports = (botState, options) => {
 
   // ── Biome Definition List ──
   client.on('biome_definition_list', (packet) => {
-    logAction('[←]', 'biome_definition_list', {
+    botState.logAction?.('[←]', 'biome_definition_list', {
       count: packet.biome_definitions.length,
     });
     // Store if needed: botState.biomeStringList = packet.string_list;
@@ -261,14 +261,14 @@ module.exports = (botState, options) => {
       }
     }
     if (!options.quietCraftingDataLog) {
-      logAction('[craft]', 'crafting_data', { recipes: botState.bedrockCraftingRecipes.length });
+      botState.logAction?.('[craft]', 'crafting_data', { recipes: botState.bedrockCraftingRecipes.length });
     }
   });
 
   // ── Play Status (player_spawn → request_chunk_radius + set_local_player_as_initialized) ──
   client.on('play_status', (packet) => {
     if (packet.status === 'player_spawn') {
-      logAction('[←]', 'play_status', { status: 'player_spawn' });
+      botState.logAction?.('[←]', 'play_status', { status: 'player_spawn' });
 
       if (options.worldDecodeEnabled !== false) {
         // Tell the server our desired view radius (must be sent before or after spawn)
@@ -312,7 +312,7 @@ module.exports = (botState, options) => {
   });
 
   client.on('close', () => {
-    logAction('[→]', 'close', { msg: 'Connection closed' });
+    botState.logAction?.('[→]', 'close', { msg: 'Connection closed' });
   });
 
   process.on('SIGINT', () => botState.disconnect('User interrupted'));

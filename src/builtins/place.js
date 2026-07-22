@@ -15,7 +15,6 @@ const {
   clickPositionForFace,
   getBlockRuntimeId: getRuntimeIdAt,
   itemToRaw: toRawItem,
-  logAction,
   positionForFace,
   sameBlockPos,
   toVec3f
@@ -79,7 +78,7 @@ function inject (botState, options) {
     }
 
     client.queue('inventory_transaction', { transaction })
-    logAction('[place]', 'sent inventory_transaction (item_use)')
+    botState.logAction?.('[place]', 'sent inventory_transaction (item_use)')
   }
 
   // ------------------------------------------------------------------
@@ -122,7 +121,7 @@ function inject (botState, options) {
       block_position: { x: targetPos.x, y: targetPos.y, z: targetPos.z },
       face: face,
       hotbar_slot: heldSlot,
-      held_item: toRawItem(heldItem, botState.itemClass),
+      held_item: toRawItem(heldItem, botState.itemClass, { logAction: botState.logAction }),
       player_pos: toVec3f(playerPos),
       click_pos: clickPositionForFace(face),
       block_runtime_id: getRuntimeIdAt(botState, targetPos),
@@ -170,7 +169,7 @@ function inject (botState, options) {
       block_position: { x: targetPos.x, y: targetPos.y, z: targetPos.z },
       face: 1, // ignored for click_air
       hotbar_slot: heldSlot,
-      held_item: toRawItem(heldItem, botState.itemClass),
+      held_item: toRawItem(heldItem, botState.itemClass, { logAction: botState.logAction }),
       player_pos: toVec3f(playerPos),
       click_pos: { x: 0.5, y: 0.5, z: 0.5 },
       block_runtime_id: 0,

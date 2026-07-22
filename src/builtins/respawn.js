@@ -1,4 +1,4 @@
-const { logAction, sameRuntimeId } = require('../utils')
+const { sameRuntimeId } = require('../utils')
 
 /**
  * Handles Bedrock death-screen respawn lifecycle.
@@ -21,14 +21,14 @@ module.exports = (botState) => {
 
   client.on('set_health', (packet) => {
     botState.playerState.health = packet.health
-    logAction('[<-]', 'set_health', {
+    botState.logAction?.('[<-]', 'set_health', {
       health: botState.playerState.health,
       isDead: botState.lifecycle.isDead
     })
 
     if (botState.playerState.health > 0 && botState.lifecycle.isDead) {
       markAlive(botState.playerState.health)
-      logAction('[->]', 'set_health -> alive')
+      botState.logAction?.('[->]', 'set_health -> alive')
     }
   })
 
@@ -39,7 +39,7 @@ module.exports = (botState) => {
     botState.lifecycle.lastRespawnPosition = null
     botState.lifecycle.sentDeathRespawnReady = false
     botState.lifecycle.sentDeathRespawnAction = false
-    logAction('[<-]', 'death_info', {
+    botState.logAction?.('[<-]', 'death_info', {
       cause: packet.cause,
       message: packet.messages?.[0]
     })
@@ -47,11 +47,11 @@ module.exports = (botState) => {
   })
 
   client.on('respawn', (packet) => {
-    logAction('[<-]', 'respawn', { state: packet.state, position: packet.position })
+    botState.logAction?.('[<-]', 'respawn', { state: packet.state, position: packet.position })
 
     if (packet.state === 0) {
       botState.lifecycle.lastRespawnPosition = packet.position
-      logAction('[<-]', 'respawn(state=0 searching)')
+      botState.logAction?.('[<-]', 'respawn(state=0 searching)')
       return
     }
 
@@ -65,7 +65,7 @@ module.exports = (botState) => {
         return
       }
 
-      logAction('[->]', 'respawn(state=2 ack) + set_local_player_as_initialized')
+      botState.logAction?.('[->]', 'respawn(state=2 ack) + set_local_player_as_initialized')
       client.queue('respawn', {
         position: packet.position,
         state: 2,
@@ -77,15 +77,15 @@ module.exports = (botState) => {
       return
     }
 
-    logAction('[<-]', 'respawn', { msg: 'unknown state', state: packet.state })
+    botState.logAction?.('[<-]', 'respawn', { msg: 'unknown state', state: packet.state })
   })
 
   client.on('spawn', () => {
     if (botState.lifecycle.isDead) {
-      logAction('[<-]', 'spawn', { msg: 'respawn completed' })
+      botState.logAction?.('[<-]', 'spawn', { msg: 'respawn completed' })
       markAlive()
     } else {
-      logAction('[<-]', 'spawn', { msg: 'initial join' })
+      botState.logAction?.('[<-]', 'spawn', { msg: 'initial join' })
     }
   })
 
@@ -95,7 +95,7 @@ module.exports = (botState) => {
     if (!botState.lifecycle.isDead || event !== 'respawn') return
     if (!sameRuntimeId(packet.runtime_entity_id ?? packet.entity_id ?? packet.id, client.entityId)) return
 
-    logAction('[<-]', 'entity_event(respawn)', { msg: 'respawn completed' })
+    botState.logAction?.('[<-]', 'entity_event(respawn)', { msg: 'respawn completed' })
     markAlive()
   })
 
@@ -103,7 +103,7 @@ module.exports = (botState) => {
     clearTimeout(botState.lifecycle.respawnTimeout)
     botState.lifecycle.respawnTimeout = setTimeout(() => {
       if (!botState.lifecycle.isDead) {
-        logAction('[->]', 'respawn', { msg: 'skipped - already alive' })
+        botState.logAction?.('[->]', 'respawn', { msg: 'skipped - already alive' })
         return
       }
 
@@ -119,7 +119,7 @@ module.exports = (botState) => {
   function sendDeathRespawnReady () {
     if (botState.lifecycle.sentDeathRespawnReady) return
     botState.lifecycle.sentDeathRespawnReady = true
-    logAction('[->]', 'respawn(state=2) death-screen ready')
+    botState.logAction?.('[->]', 'respawn(state=2) death-screen ready')
     client.queue('respawn', {
       position: { x: 0, y: 0, z: 0 },
       state: 2,
@@ -130,7 +130,7 @@ module.exports = (botState) => {
   function sendDeathRespawnAction () {
     if (botState.lifecycle.sentDeathRespawnAction) return
     botState.lifecycle.sentDeathRespawnAction = true
-    logAction('[->]', 'player_action(respawn) request')
+    botState.logAction?.('[->]', 'player_action(respawn) request')
     client.queue('player_action', {
       runtime_entity_id: client.entityId,
       action: 'respawn',

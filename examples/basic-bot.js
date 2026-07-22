@@ -2,7 +2,6 @@ process.env.DEBUG_PHYSICS = true
 
 const { BotState } = require('..')
 const Vec3 = require('vec3').Vec3
-const { logAction } = require('../src/utils')
 const { bedrockVersionFromEnv } = require('../src/version')
 
 const options = {
@@ -29,7 +28,7 @@ function computeLookAngles (observer, target) {
 
 async function logBlocksAroundBot (radius = 2, yRadius = 2) {
   if (!bot.self || !bot.self.position) {
-    logAction('[->]', 'command', { msg: 'Bot position not available.' })
+    bot.logAction('[->]', 'command', { msg: 'Bot position not available.' })
     return
   }
 
@@ -90,21 +89,21 @@ bot.on('chat', async (data) => {
       const blockName = normalizeBlockName(args.join(' '))
 
       if (!blockName) {
-        logAction('[->]', 'command', { msg: 'Usage: !search <block name>' })
+        bot.logAction('[->]', 'command', { msg: 'Usage: !search <block name>' })
         return
       }
 
       const ids = buildTargetSetForBlock(blockName, bot.registry)
 
       if (!ids) {
-        logAction('[->]', 'command', { msg: `Unknown block: ${blockName}` })
+        bot.logAction('[->]', 'command', { msg: `Unknown block: ${blockName}` })
         return
       }
 
       bot.currentTargetBlock = blockName
       bot.targetStateIds = ids
 
-      logAction('[->]', 'command', {
+      bot.logAction('[->]', 'command', {
         msg: `Now searching for: ${blockName}`,
         matchingStates: ids.size
       })
@@ -116,7 +115,7 @@ bot.on('chat', async (data) => {
     case 'stop':
       bot.currentTargetBlock = null
       bot.targetStateIds = null
-      logAction('[->]', 'command', { msg: 'Stopped searching' })
+      bot.logAction('[->]', 'command', { msg: 'Stopped searching' })
       break
 
     case 'scan':
@@ -130,7 +129,7 @@ bot.on('chat', async (data) => {
       const yRadius = args[1] ? Number(args[1]) : 2
 
       if (!Number.isFinite(radius) || !Number.isFinite(yRadius)) {
-        logAction('[->]', 'command', { msg: 'Usage: !blocks [radius] [yRadius]' })
+        bot.logAction('[->]', 'command', { msg: 'Usage: !blocks [radius] [yRadius]' })
         break
       }
 
@@ -152,20 +151,20 @@ bot.on('chat', async (data) => {
       const controlName = cmd
 
       if (typeof bot.setControlState !== 'function') {
-        logAction('[->]', 'command', { msg: 'Control states not available' })
+        bot.logAction('[->]', 'command', { msg: 'Control states not available' })
         break
       }
 
       const boolVal = args[0] ? args[0] === 'true' : !bot.getControlState(controlName)
       bot.setControlState(controlName, boolVal)
 
-      logAction('[->]', 'command', { msg: `${controlName} set to ${boolVal}` })
+      bot.logAction('[->]', 'command', { msg: `${controlName} set to ${boolVal}` })
       break
     }
 
     case 'setcontrol': {
       if (args.length < 2) {
-        logAction('[->]', 'command', { msg: 'Usage: !setControl <control name> <true|false>' })
+        bot.logAction('[->]', 'command', { msg: 'Usage: !setControl <control name> <true|false>' })
         break
       }
 
@@ -173,29 +172,29 @@ bot.on('chat', async (data) => {
       const val = args.slice(1).join(' ')
 
       if (typeof bot.setControlState !== 'function') {
-        logAction('[->]', 'command', { msg: 'Control states not available' })
+        bot.logAction('[->]', 'command', { msg: 'Control states not available' })
         break
       }
 
       const boolVal = val === 'true'
       bot.setControlState(name, boolVal)
 
-      logAction('[->]', 'command', { msg: `${name} set to ${boolVal}` })
+      bot.logAction('[->]', 'command', { msg: `${name} set to ${boolVal}` })
       break
     }
 
     case 'clearcontrols':
       if (typeof bot.clearControlStates === 'function') {
         bot.clearControlStates()
-        logAction('[->]', 'command', { msg: 'All control states cleared' })
+        bot.logAction('[->]', 'command', { msg: 'All control states cleared' })
       } else {
-        logAction('[->]', 'command', { msg: 'Control states not available' })
+        bot.logAction('[->]', 'command', { msg: 'Control states not available' })
       }
       break
 
     case 'look': {
       if (args.length < 2) {
-        logAction('[->]', 'command', { msg: 'Usage: !look <yaw> <pitch> (both numbers)' })
+        bot.logAction('[->]', 'command', { msg: 'Usage: !look <yaw> <pitch> (both numbers)' })
         break
       }
 
@@ -203,39 +202,39 @@ bot.on('chat', async (data) => {
       const pitch = parseFloat(args[1])
 
       if (isNaN(yaw) || isNaN(pitch)) {
-        logAction('[->]', 'command', { msg: 'Invalid yaw or pitch' })
+        bot.logAction('[->]', 'command', { msg: 'Invalid yaw or pitch' })
         break
       }
 
       bot.look(yaw, pitch)
-      logAction('[->]', 'command', { msg: `Looked at yaw=${yaw}, pitch=${pitch}` })
+      bot.logAction('[->]', 'command', { msg: `Looked at yaw=${yaw}, pitch=${pitch}` })
       break
     }
 
     case 'lookat': {
       if (args.length < 3) {
-        logAction('[->]', 'command', { msg: 'Usage: !lookAt <x> <y> <z>' })
+        bot.logAction('[->]', 'command', { msg: 'Usage: !lookAt <x> <y> <z>' })
         break
       }
 
       const [tx, ty, tz] = args.map(parseFloat)
 
       if (isNaN(tx) || isNaN(ty) || isNaN(tz)) {
-        logAction('[->]', 'command', { msg: 'Invalid coordinates. Provide three numbers.' })
+        bot.logAction('[->]', 'command', { msg: 'Invalid coordinates. Provide three numbers.' })
         break
       }
 
       const target = new Vec3(tx, ty, tz)
 
       if (!bot.self || !bot.self.position) {
-        logAction('[->]', 'command', { msg: 'Bot position not available.' })
+        bot.logAction('[->]', 'command', { msg: 'Bot position not available.' })
         break
       }
 
       const { yaw, pitch } = computeLookAngles(bot.self.position, target)
       bot.look(yaw, pitch)
 
-      logAction('[->]', 'command', { msg: `Looked at vec3 (${tx}, ${ty}, ${tz})` })
+      bot.logAction('[->]', 'command', { msg: `Looked at vec3 (${tx}, ${ty}, ${tz})` })
       break
     }
 
@@ -243,24 +242,24 @@ bot.on('chat', async (data) => {
       const player = bot.nearestEntity(e => e.username === sourceName)
 
       if (!player || !player.position) {
-        logAction('[->]', 'command', { msg: `Cannot find player ${sourceName} position.` })
+        bot.logAction('[->]', 'command', { msg: `Cannot find player ${sourceName} position.` })
         break
       }
 
       if (!bot.self || !bot.self.position) {
-        logAction('[->]', 'command', { msg: 'Bot position not available.' })
+        bot.logAction('[->]', 'command', { msg: 'Bot position not available.' })
         break
       }
 
       bot.lookAt(player.position, true)
       bot.chat('try')
 
-      logAction('[->]', 'command', { msg: `Looked at ${sourceName}` })
+      bot.logAction('[->]', 'command', { msg: `Looked at ${sourceName}` })
       break
     }
 
     default:
-      logAction('[->]', 'command', { msg: `Unknown command: ${cmd}` })
+      bot.logAction('[->]', 'command', { msg: `Unknown command: ${cmd}` })
       break
   }
 })

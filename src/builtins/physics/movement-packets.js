@@ -1,5 +1,5 @@
 const { Vec3 } = require('vec3')
-const { degreesToRadians, deltaDeg, logAction, normalizeInputData, numberOrZero } = require('../../utils')
+const { degreesToRadians, deltaDeg, normalizeInputData, numberOrZero } = require('../../utils')
 const { toFeetPosition } = require('./position')
 
 const INPUT_FLAG_NAME_BY_CONSTANT = {
@@ -187,7 +187,7 @@ function createMovementPacketSender (botState, C, options = {}) {
 
     botState._applyPlayerAuthInputHooks?.(packet, { botState, dt, self })
     if (packet.item_stack_request) {
-      logAction('[auth_input]', 'send item_stack_request', {
+      botState.logAction?.('[auth_input]', 'send item_stack_request', {
         inputData: packet.input_data?._value ?? packet.input_data,
         tick: packet.tick,
         requestId: packet.item_stack_request.request_id,

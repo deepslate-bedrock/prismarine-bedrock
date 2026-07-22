@@ -1,4 +1,4 @@
-const { logAction, normalizeBedrockUuid, sameRuntimeId } = require('../utils');
+const { normalizeBedrockUuid, sameRuntimeId } = require('../utils');
 const { Vec3 } = require('vec3');
 const { applyEntityMetadata, applyHealth, flagsToBigInt, METADATA_FLAGS } = require('../entity-metadata');
 
@@ -78,7 +78,7 @@ module.exports = (botState, options) => {
   // Health (mirrors mineflayer's health.js pattern)
   botState.client.on('set_health', (packet) => {
     if (botState.self) applyHealth(botState.self, packet);
-    logAction('[→]', 'set_health', { health: packet.health });
+    botState.logAction?.('[→]', 'set_health', { health: packet.health });
     botState.emit('health');
     if (packet.health <= 0) botState.emit('death');
   });
@@ -89,7 +89,7 @@ module.exports = (botState, options) => {
     const entity = botState.playerEntities.get(packet.runtime_entity_id);
     if (entity) {
       entity.position.set(packet.position.x, packet.position.y, packet.position.z);
-      logAction('[→]', 'respawn', { id: packet.runtime_entity_id });
+      botState.logAction?.('[→]', 'respawn', { id: packet.runtime_entity_id });
     }
   });
 
@@ -98,7 +98,7 @@ module.exports = (botState, options) => {
     botState.playerState ??= {};
     if (!botState.playerState.spawnPosition) botState.playerState.spawnPosition = new Vec3(0, 0, 0);
     botState.playerState.spawnPosition.set(packet.player_position.x, packet.player_position.y, packet.player_position.z);
-    logAction('[→]', 'set_spawn_position', { pos: botState.playerState.spawnPosition });
+    botState.logAction?.('[→]', 'set_spawn_position', { pos: botState.playerState.spawnPosition });
     botState.emit('game');
   });
 

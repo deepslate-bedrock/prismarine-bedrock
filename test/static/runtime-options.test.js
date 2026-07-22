@@ -3,7 +3,6 @@
 const assert = require('assert')
 const { EventEmitter } = require('events')
 const BotState = require('../../src/state')
-const { isLoggingEnabled, logAction, setLoggingEnabled } = require('../../src/utils')
 const pluginLoader = require('../../src/plugin-loader')
 const setupPlugin = require('../../src/builtins/setup')
 const worldPlugin = require('../../src/builtins/world')
@@ -50,13 +49,10 @@ describe('runtime options', function () {
       })
 
       assert.strictEqual(bot.options.loggingEnabled, false)
-      assert.strictEqual(isLoggingEnabled(), false)
-
-      logAction('[test]', 'hidden')
+      bot.logAction('[test]', 'hidden')
       assert.deepStrictEqual(lines, [])
     } finally {
       console.log = originalLog
-      setLoggingEnabled(true)
     }
   })
 

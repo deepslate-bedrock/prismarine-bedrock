@@ -4,7 +4,7 @@
 const { buildStatic } = require('mineflayer-crafting-util')
 const recipeLoader = require('prismarine-recipe')
 const registryLoader = require('prismarine-registry')
-const { itemStackId, logAction, responseSlot, responseStackId, sleep } = require('../utils')
+const { itemStackId, responseSlot, responseStackId, sleep } = require('../utils')
 
 const CONTAINER = {
   output: 'creative_output',
@@ -763,7 +763,7 @@ function sendRequest (botState, actions, options = {}) {
   })
   const request = { request_id: requestId, actions: requestActions, custom_names: [], cause: -1 }
 
-  logAction('[craft]', 'item_stack_request', {
+  botState.logAction?.('[craft]', 'item_stack_request', {
     requestId,
     actions: requestActions.map(action => action.type_id),
     actionDetails: actionDebugSummary(requestActions),
@@ -1009,7 +1009,7 @@ async function injectCrafting (botState, options = {}) {
   botState.craftRecipeBookAuto = botState.craftItemRecipeBookAuto
   botState.craftNormal = botState.craftItemNormal
 
-  logAction('[craft]', 'crafting plugin loaded')
+  botState.logAction?.('[craft]', 'crafting plugin loaded')
 }
 
 module.exports = injectCrafting

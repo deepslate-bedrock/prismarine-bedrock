@@ -4,7 +4,6 @@
 
 const crypto = require('crypto')
 const fs = require('fs')
-const { logAction } = require('../utils')
 
 module.exports = function commandsPlugin (botState, options = {}) {
   const client = botState.client
@@ -45,7 +44,7 @@ module.exports = function commandsPlugin (botState, options = {}) {
         suppress_output: opts.suppressOutput ?? false
       })
 
-      logAction('[command]', 'settings', {
+      botState.logAction?.('[command]', 'settings', {
         command: slash(value),
         requestId: id
       })
@@ -63,7 +62,7 @@ module.exports = function commandsPlugin (botState, options = {}) {
         command: command.replace(/^\//, '')
       })}\n`)
 
-      logAction('[command]', 'server_file', {
+      botState.logAction?.('[command]', 'server_file', {
         command,
         requestId: id
       })
@@ -78,7 +77,7 @@ module.exports = function commandsPlugin (botState, options = {}) {
       version: opts.version ?? commandVersion
     })
 
-    logAction('[command]', 'request', {
+    botState.logAction?.('[command]', 'request', {
       command: slash(value),
       requestId: id
     })
@@ -98,7 +97,7 @@ module.exports = function commandsPlugin (botState, options = {}) {
       has_filtered_message: false
     })
 
-    logAction('[command]', 'chat', {
+    botState.logAction?.('[command]', 'chat', {
       command: slash(value)
     })
   }
@@ -114,7 +113,7 @@ module.exports = function commandsPlugin (botState, options = {}) {
       has_filtered_message: false
     })
 
-    logAction('[command]', 'raw', {
+    botState.logAction?.('[command]', 'raw', {
       command: slash(value)
     })
   }

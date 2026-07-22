@@ -8,7 +8,6 @@ const {
   clickPositionForFace,
   getBlockRuntimeId,
   itemToRawWithoutStackId,
-  logAction,
   lookPositionForFace,
   positionForFace,
   raycastBlock,
@@ -156,7 +155,10 @@ module.exports = function containersPlugin (botState, options = {}) {
           block_position: { x: target.x, y: target.y, z: target.z },
           face,
           hotbar_slot: heldSlot,
-          held_item: itemToRawWithoutStackId(heldItem, botState.itemClass, { hasStackId: 'always' }),
+          held_item: itemToRawWithoutStackId(heldItem, botState.itemClass, {
+            hasStackId: 'always',
+            logAction: botState.logAction
+          }),
           player_pos: toVec3f(playerPos),
           click_pos: clickPos,
           block_runtime_id: getBlockRuntimeId(botState, target, {
@@ -169,7 +171,7 @@ module.exports = function containersPlugin (botState, options = {}) {
       }
     })
 
-    logAction('[containers]', 'open block container', { pos: target, face })
+    botState.logAction?.('[containers]', 'open block container', { pos: target, face })
 
     return () => {
       client.queue('player_action', {
@@ -548,7 +550,7 @@ module.exports = function containersPlugin (botState, options = {}) {
     pending.push(packet)
     pendingContainerData.set(windowId, pending)
 
-    logAction('[containers]', 'buffered container_set_data for pending container', {
+    botState.logAction?.('[containers]', 'buffered container_set_data for pending container', {
       windowId,
       keys: Object.keys(packet),
       pending: pending.length
@@ -562,7 +564,7 @@ module.exports = function containersPlugin (botState, options = {}) {
 
     pendingContainerData.delete(id)
 
-    logAction('[containers]', 'replaying buffered container_set_data', {
+    botState.logAction?.('[containers]', 'replaying buffered container_set_data', {
       windowId: id,
       count: pending.length
     })
@@ -585,7 +587,7 @@ module.exports = function containersPlugin (botState, options = {}) {
     const value = packetValue(packet)
 
     if (property == null || value == null) {
-      logAction('[containers]', 'container_set_data missing property/value', {
+      botState.logAction?.('[containers]', 'container_set_data missing property/value', {
         windowId,
         type: container.type,
         keys: Object.keys(packet)
@@ -610,7 +612,7 @@ module.exports = function containersPlugin (botState, options = {}) {
     })
 
     if (!handled) {
-      logAction('[containers]', 'container_set_data', {
+      botState.logAction?.('[containers]', 'container_set_data', {
         windowId,
         type: container.type,
         property,
@@ -646,7 +648,7 @@ module.exports = function containersPlugin (botState, options = {}) {
     })
 
     if (!handled) {
-      logAction('[containers]', 'unhandled player_enchant_options', {
+      botState.logAction?.('[containers]', 'unhandled player_enchant_options', {
         optionCount: packet.options?.length ?? 0
       })
     }

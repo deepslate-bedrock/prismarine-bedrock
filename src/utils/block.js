@@ -1,4 +1,3 @@
-const { logAction } = require('./logging')
 const Vec3 = require('vec3').Vec3
 
 function getStateId (registry, runtimeId) {
@@ -29,7 +28,7 @@ function getBlockRuntimeId (botState, pos, fallback = {}) {
       return botState.registry.blockNetworkRuntimeIdsByStateId?.[block.stateId] ?? block.stateId
     }
   } catch (err) {
-    logAction('[utils]', 'getBlockRuntimeId error', { pos: pos.toString(), msg: err.message })
+    botState.logAction?.('[utils]', 'getBlockRuntimeId error', { pos: pos.toString(), msg: err.message })
   }
 
   return fallback.blockRuntimeId ??

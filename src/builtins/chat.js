@@ -22,8 +22,6 @@
 // prismarine-chat is used as the primary parser. A server-specific fallback is kept for
 // non-standard servers that do not set packet.source_name.
 
-const { logAction } = require('../utils')
-
 // Mapping from numeric packet type to event name (see proto.yml packet_text)
 const TYPE_EVENT = {
   0: 'raw',
@@ -111,7 +109,7 @@ function inject (botState, options) {
    */
   botState.chat = function (message) {
     if (!client || client.status === 0) {
-      logAction('[!]', 'cannot say – client not connected')
+      botState.logAction?.('[!]', 'cannot say – client not connected')
       return
     }
     const chatMessage = new ChatMessage(message)
@@ -134,11 +132,11 @@ function inject (botState, options) {
    */
   botState.whisper = function (target, message) {
     if (!client || client.status === 0) {
-      logAction('[!]', 'cannot whisper – client not connected')
+      botState.logAction?.('[!]', 'cannot whisper – client not connected')
       return
     }
     if (!target || !target.trim()) {
-      logAction('[!]', 'whisper target must be a non-empty player name')
+      botState.logAction?.('[!]', 'whisper target must be a non-empty player name')
       return
     }
     const chatMessage = new ChatMessage(message)

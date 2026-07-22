@@ -1,5 +1,5 @@
 const Vec3 = require('vec3');
-const { findEntityByRuntimeId, logAction, sameRuntimeId } = require('../utils');
+const { findEntityByRuntimeId, sameRuntimeId } = require('../utils');
 const {
   applyAbilities,
   applyAdventureSettings,
@@ -89,7 +89,7 @@ module.exports = (botState, options) => {
     botState.self = entity;
     botState.playerEntities.set(packet.runtime_entity_id, entity);
 
-    logAction('[→]', 'start_game (self)', { id: packet.runtime_entity_id, pos: botState.self.position });
+    botState.logAction?.('[→]', 'start_game (self)', { id: packet.runtime_entity_id, pos: botState.self.position });
   });
 
   // ========== Remote player entities (from add_player) ==========
@@ -116,7 +116,7 @@ module.exports = (botState, options) => {
     entity.abilities = packet.abilities;
 
     botState.playerEntities.set(packet.runtime_id, entity);
-    logAction('[→]', 'add_player', { id: packet.runtime_id, username: packet.username });
+    botState.logAction?.('[→]', 'add_player', { id: packet.runtime_id, username: packet.username });
     botState.emit('playerSpawned', entity);
   });
 
@@ -151,7 +151,7 @@ module.exports = (botState, options) => {
     applyAttributes(entity, packet.attributes);
 
     botState.entities.set(packet.runtime_id, entity);
-    logAction('[→]', 'add_entity', { id: packet.runtime_id, type: entity.name, pos: entity.position });
+    botState.logAction?.('[→]', 'add_entity', { id: packet.runtime_id, type: entity.name, pos: entity.position });
     botState.emit('entitySpawned', entity);
   });
 
@@ -175,7 +175,7 @@ module.exports = (botState, options) => {
     }
 
     botState.entities.set(packet.runtime_entity_id, entity);
-    logAction('[→]', 'add_item_entity', { id: packet.runtime_entity_id, item: entity.displayName });
+    botState.logAction?.('[→]', 'add_item_entity', { id: packet.runtime_entity_id, item: entity.displayName });
     botState.emit('entitySpawned', entity);
   });
 
@@ -191,7 +191,7 @@ module.exports = (botState, options) => {
       if (botState.self === entity) {
         botState.self = null;
       }
-      logAction('[→]', 'remove_entity', { id: key });
+      botState.logAction?.('[→]', 'remove_entity', { id: key });
       botState.emit('entityRemoved', entity);
     }
   });
@@ -200,7 +200,7 @@ module.exports = (botState, options) => {
   botState.client.on('take_item_entity', (packet) => {
     const entity = findEntityByRuntimeId(botState, packet.runtime_entity_id);
     if (!entity) return;
-    logAction('[→]', 'take_item_entity', { id: packet.runtime_entity_id, collector: packet.target });
+    botState.logAction?.('[→]', 'take_item_entity', { id: packet.runtime_entity_id, collector: packet.target });
     const isSelf = sameRuntimeId(packet.target, botState.client.entityId);
     botState.emit('itemPickup', {
       itemEntity: entity,
@@ -296,7 +296,7 @@ module.exports = (botState, options) => {
   botState.client.on('entity_event', (packet) => {
     const entity = findEntityByRuntimeId(botState, packet.runtime_entity_id);
     if (!entity) return;
-    logAction('[→]', 'entity_event', { id: packet.runtime_entity_id, event: packet.event_id });
+    botState.logAction?.('[→]', 'entity_event', { id: packet.runtime_entity_id, event: packet.event_id });
     botState.emit('entityEvent', entity, packet.event_id, packet.data);
   });
 

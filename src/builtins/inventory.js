@@ -17,7 +17,6 @@
 const {
   cloneItem,
   itemStackResponseStatusOk,
-  logAction,
   rawStackId,
   responseInventorySlots,
   sameRuntimeId,
@@ -90,7 +89,7 @@ function inject (botState, options = {}) {
 
       if (stackId == null && !loggedRawItemIdentity) {
         loggedRawItemIdentity = true
-        logAction('[inventory]', 'raw item identity fields missing', {
+        botState.logAction?.('[inventory]', 'raw item identity fields missing', {
           keys: Object.keys(raw),
           networkId: raw.network_id,
           hasStackId: raw.has_stack_id,
@@ -103,7 +102,7 @@ function inject (botState, options = {}) {
 
       return item
     } catch (e) {
-      logAction('[inventory]', 'deserialize error', {
+      botState.logAction?.('[inventory]', 'deserialize error', {
         networkId: raw.network_id,
         error: e.message
       })
@@ -134,13 +133,13 @@ function inject (botState, options = {}) {
 
     win.on('updateSlot', (slot, oldItem, newItem) => {
       if (oldItem && !newItem) {
-        logAction('[inventory]', `${label} ${windowId} slot ${slot} cleared (was ${oldItem.name} x${oldItem.count})`)
+        botState.logAction?.('[inventory]', `${label} ${windowId} slot ${slot} cleared (was ${oldItem.name} x${oldItem.count})`)
       } else if (!oldItem && newItem) {
-        logAction('[inventory]', `${label} ${windowId} slot ${slot} gained ${newItem.name} x${newItem.count}`)
+        botState.logAction?.('[inventory]', `${label} ${windowId} slot ${slot} gained ${newItem.name} x${newItem.count}`)
       } else if (oldItem && newItem && oldItem.type !== newItem.type) {
-        logAction('[inventory]', `${label} ${windowId} slot ${slot} replaced: ${oldItem.name} x${oldItem.count} → ${newItem.name} x${newItem.count}`)
+        botState.logAction?.('[inventory]', `${label} ${windowId} slot ${slot} replaced: ${oldItem.name} x${oldItem.count} → ${newItem.name} x${newItem.count}`)
       } else if (oldItem && newItem && oldItem.count !== newItem.count) {
-        logAction('[inventory]', `${label} ${windowId} slot ${slot} count changed: ${oldItem.count} → ${newItem.count}`)
+        botState.logAction?.('[inventory]', `${label} ${windowId} slot ${slot} count changed: ${oldItem.count} → ${newItem.count}`)
       }
     })
   }
@@ -187,7 +186,7 @@ function inject (botState, options = {}) {
       if (win.slots[i] === undefined) win.slots[i] = null
     }
 
-    logAction('[inventory]', 'resized container window from content', {
+    botState.logAction?.('[inventory]', 'resized container window from content', {
       windowId,
       containerSlots: slots.length,
       totalSlots: win.slots.length
@@ -232,7 +231,7 @@ function inject (botState, options = {}) {
     const nextDesc = itemDesc(item)
 
     if (logUnchangedUiSlots || !hadPrevious || previousDesc !== nextDesc) {
-      logAction('[inventory]', 'ui_slot', {
+      botState.logAction?.('[inventory]', 'ui_slot', {
         slot: packet.slot,
         item: nextDesc,
         projected
@@ -251,7 +250,7 @@ function inject (botState, options = {}) {
       projectUiSlotToActiveWindow(i, item, packet)
     }
 
-    logAction('[inventory]', 'ui_content', { slots: slots.length })
+    botState.logAction?.('[inventory]', 'ui_content', { slots: slots.length })
     botState.emit('ui_content_updated', uiSlots, packet)
   }
 
@@ -340,14 +339,14 @@ function inject (botState, options = {}) {
 
     const win = getWindow(windowId)
     if (!win) {
-      logAction('[inventory]', 'inventory_content for unknown window', { windowId })
+      botState.logAction?.('[inventory]', 'inventory_content for unknown window', { windowId })
       return
     }
 
     const slots = packet.input
     resizeFromContentIfNeeded(win, windowId, slots)
 
-    logAction('[inventory]', `inventory_content: window=${windowId}, ${slots.length} slots`)
+    botState.logAction?.('[inventory]', `inventory_content: window=${windowId}, ${slots.length} slots`)
 
     for (let i = 0; i < Math.min(slots.length, win.slots.length); i++) {
       win.updateSlot(i, toItem(slots[i]))
@@ -367,12 +366,12 @@ function inject (botState, options = {}) {
 
     const win = getWindow(windowId)
     if (!win) {
-      logAction('[inventory]', 'inventory_slot for unknown window', { windowId })
+      botState.logAction?.('[inventory]', 'inventory_slot for unknown window', { windowId })
       return
     }
 
     const item = toItem(packet.item)
-    logAction('[inventory]', `inventory_slot: window=${windowId}, slot=${packet.slot}, item=${itemDesc(item)}`)
+    botState.logAction?.('[inventory]', `inventory_slot: window=${windowId}, slot=${packet.slot}, item=${itemDesc(item)}`)
     win.updateSlot(packet.slot, item)
   })
 
@@ -381,7 +380,7 @@ function inject (botState, options = {}) {
     if (typeof packet.slot !== 'number') return
 
     const item = toItem(packet.item)
-    logAction('[inventory]', `mob_equipment: slot=${packet.slot}, selected=${packet.selected_slot}, item=${itemDesc(item)}`)
+    botState.logAction?.('[inventory]', `mob_equipment: slot=${packet.slot}, selected=${packet.selected_slot}, item=${itemDesc(item)}`)
 
     windows.get(0)?.updateSlot(packet.slot, item)
 
@@ -398,7 +397,7 @@ function inject (botState, options = {}) {
 
     setActiveWindow(windowId)
 
-    logAction('[inventory]', `container_open: id=${windowId}, type=${windowType}, slots=${win.slots.length}`)
+    botState.logAction?.('[inventory]', `container_open: id=${windowId}, type=${windowType}, slots=${win.slots.length}`)
   })
 
   botState.client.on('update_trade', (packet) => {
@@ -414,7 +413,7 @@ function inject (botState, options = {}) {
     setActiveWindow(windowId)
     projectKnownUiSlotsToActiveWindow()
 
-    logAction('[inventory]', 'trade_window_open', {
+    botState.logAction?.('[inventory]', 'trade_window_open', {
       windowId,
       type: win.windowType,
       slots: win.slots.length,
@@ -429,7 +428,7 @@ function inject (botState, options = {}) {
     const win = getWindow(windowId)
 
     if (!win) {
-      logAction('[inventory]', 'container_set_data for unknown window', { windowId })
+      botState.logAction?.('[inventory]', 'container_set_data for unknown window', { windowId })
       return
     }
 
@@ -443,14 +442,14 @@ function inject (botState, options = {}) {
     const windowId = normalizeWindowId(packet.window_id)
 
     if (windowId === UI_WINDOW_ID) {
-      logAction('[inventory]', 'container_close ignored for ui container', { windowId })
+      botState.logAction?.('[inventory]', 'container_close ignored for ui container', { windowId })
       return
     }
 
     if (PERSISTENT_WINDOW_IDS.has(windowId)) {
-      logAction('[inventory]', 'container_close ignored for persistent window', { windowId })
+      botState.logAction?.('[inventory]', 'container_close ignored for persistent window', { windowId })
     } else if (windows.has(windowId)) {
-      logAction('[inventory]', `container_close: id=${windowId}`)
+      botState.logAction?.('[inventory]', `container_close: id=${windowId}`)
       windows.delete(windowId)
     }
 

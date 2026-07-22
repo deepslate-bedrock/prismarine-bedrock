@@ -241,7 +241,11 @@ module.exports = (botState) => {
     const heldSlot = botState.heldItemSlot ?? 0
     const held = {
       heldSlot,
-      raw: itemToRawWithoutStackId(botState.inventory?.slots?.[heldSlot] ?? null, botState.itemClass)
+      raw: itemToRawWithoutStackId(
+        botState.inventory?.slots?.[heldSlot] ?? null,
+        botState.itemClass,
+        { logAction: botState.logAction }
+      )
     }
     const playerPos = botState.self?.position ?? botState.playerState?.spawnPosition ?? pos
     const runtimeEntityId = client.entityId ?? botState.self?.runtimeId ?? 0n

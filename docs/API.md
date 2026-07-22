@@ -81,7 +81,7 @@ custom bootstrapping need manual control.
 | Option | Default | Notes |
 | --- | --- | --- |
 | `version` | package default Bedrock version | Normalized through `normalizeBedrockVersion`. |
-| `loggingEnabled` | `true` | Controls `logAction` output. Accepts booleans and boolean-like strings. |
+| `loggingEnabled` | `true` | Controls this bot's `bot.logAction` output. Accepts booleans and boolean-like strings. |
 | `worldDecodeEnabled` | `true` | Enables world/chunk decode and chunk requests. |
 | `physicsEnabled` | same as `worldDecodeEnabled` | Requires `worldDecodeEnabled: true`. Disable for packet-only bots. |
 | `physicsEngine` | `'native'` | Supports `'native'`, `'nxg'`, and alias `'nxg-org'`. |
@@ -97,6 +97,7 @@ custom bootstrapping need manual control.
 | --- | --- | --- | --- |
 | `bot.start()` | `stable` | `undefined` | Creates the Bedrock client, attaches registry, and injects built-ins. |
 | `bot.disconnect(reason = 'Client shutting down')` | `stable` | `undefined` | Calls client `disconnect` or `close`. Fails if no client exists. |
+| `bot.logAction(direction, name, detail?)` | `partial` | `undefined` | Writes one action-log entry when this bot's `loggingEnabled` option is enabled. |
 
 ### Package Exports
 

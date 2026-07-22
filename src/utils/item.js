@@ -1,5 +1,3 @@
-const { logAction } = require('./logging')
-
 function rawStackId (raw) {
   return raw?.stack_id ?? raw?.stackId ?? raw?.stack_network_id ?? raw?.network_stack_id
 }
@@ -59,14 +57,14 @@ function itemCount (item) {
   return Number(item?.count ?? item?.Count ?? item?.amount ?? item?.Amount ?? 0)
 }
 
-function itemToRaw (item, itemClass) {
+function itemToRaw (item, itemClass, options = {}) {
   if (!item) return { network_id: 0 }
   if (item.raw) return item.raw
   try {
     if (typeof item.toNotch === 'function') return item.toNotch()
     if (itemClass && typeof itemClass.toNotch === 'function') return itemClass.toNotch(item)
   } catch (err) {
-    logAction('[utils]', 'itemToRaw error', { msg: err.message })
+    options.logAction?.('[utils]', 'itemToRaw error', { msg: err.message })
   }
 
   return {
@@ -79,7 +77,7 @@ function itemToRaw (item, itemClass) {
 }
 
 function itemToRawWithoutStackId (item, itemClass, options = {}) {
-  const raw = { ...itemToRaw(item, itemClass) }
+  const raw = { ...itemToRaw(item, itemClass, options) }
   const hadStackId = raw.stack_id != null ||
     raw.stackId != null ||
     raw.stack_network_id != null ||

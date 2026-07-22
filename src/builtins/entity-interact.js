@@ -23,7 +23,6 @@
 const {
   entityRuntimeId,
   itemToRaw,
-  logAction,
   selfRuntimeEntityId,
   sleep,
   toPlainId,
@@ -58,7 +57,7 @@ module.exports = function entityInteractPlugin (botState) {
     const slot = opts.hotbarSlot ?? heldHotbarSlot()
     const item = opts.heldItem ?? heldItemForSlot(slot)
 
-    return itemToRaw(item, botState.itemClass)
+    return itemToRaw(item, botState.itemClass, { logAction: botState.logAction })
   }
 
   function playerPosition (opts = {}) {
@@ -120,7 +119,7 @@ module.exports = function entityInteractPlugin (botState) {
       packet
     })
 
-    logAction('[entity-interact]', 'interact mouse_over_entity', {
+    botState.logAction?.('[entity-interact]', 'interact mouse_over_entity', {
       target: toPlainId(runtimeId),
       has_position: packet.has_position
     })
@@ -146,7 +145,7 @@ module.exports = function entityInteractPlugin (botState) {
 
     botState.emit('entity_swing_request', packet)
 
-    logAction('[entity-interact]', 'animate swing_arm', {
+    botState.logAction?.('[entity-interact]', 'animate swing_arm', {
       runtime_entity_id: toPlainId(runtimeId)
     })
 
@@ -187,7 +186,7 @@ module.exports = function entityInteractPlugin (botState) {
       transaction
     })
 
-    logAction('[entity-interact]', `inventory_transaction item_use_on_entity ${actionName(normalizedActionType)}`, {
+    botState.logAction?.('[entity-interact]', `inventory_transaction item_use_on_entity ${actionName(normalizedActionType)}`, {
       target: toPlainId(runtimeId),
       action_type: normalizedActionType,
       hotbar_slot: hotbarSlot,

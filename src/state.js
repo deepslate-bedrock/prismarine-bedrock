@@ -1,6 +1,6 @@
 const bedrock = require('bedrock-protocol');
 const Vec3 = require('vec3').Vec3;
-const { logAction, setLoggingEnabled } = require('./utils');
+const { createActionLogger } = require('./utils');
 const { EventEmitter } = require('stream');
 const { bedrockRegistryName, normalizeBedrockVersion } = require('./version');
 const pluginLoader = require('./plugin-loader');
@@ -57,7 +57,7 @@ class BotState extends EventEmitter {
       ...options,
       version: normalizeBedrockVersion(options.version)
     });
-    setLoggingEnabled(this.options.loggingEnabled);
+    this.logAction = createActionLogger(this.options.loggingEnabled);
     const registry = require('prismarine-registry')(bedrockRegistryName(this.options.version));
 
     this.registry = registry;
@@ -141,7 +141,7 @@ class BotState extends EventEmitter {
   }
 
   disconnect (reason = 'Client shutting down') {
-    logAction('[→]', 'disconnect', { reason });
+    this.logAction('[→]', 'disconnect', { reason });
     if (this.client.status !== 0) {
       this.client.disconnect(reason);
     } else {

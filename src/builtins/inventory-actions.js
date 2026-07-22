@@ -28,7 +28,6 @@ const {
   cloneItem,
   itemStackResponseStatusOk,
   itemToRaw,
-  logAction,
   maxStackSize,
   parseItemStackResponsePacket,
   selfRuntimeEntityId,
@@ -504,7 +503,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     for (const request of requests) {
       botState.emit('inventory_action_request', request)
 
-      logAction('[inventory-actions]', 'item_stack_request', {
+      botState.logAction?.('[inventory-actions]', 'item_stack_request', {
         requestId: request.request_id,
         actions: request.actions.map(action => action.type_id)
       })
@@ -519,7 +518,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     })
     botState.emit('inventory_action_request', request)
 
-    logAction('[inventory-actions]', 'standalone item_stack_request', {
+    botState.logAction?.('[inventory-actions]', 'standalone item_stack_request', {
       requestId: request.request_id,
       actions: request.actions.map(action => action.type_id)
     })
@@ -542,7 +541,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     const item = itemAt(slot)
     client.queue('mob_equipment', {
       runtime_entity_id: runtimeEntityId,
-      item: itemToRaw(item, botState.itemClass),
+      item: itemToRaw(item, botState.itemClass, { logAction: botState.logAction }),
       slot,
       selected_slot: slot,
       window_id: 'inventory'
@@ -551,7 +550,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     botState.heldItemSlot = slot
     botState.emit('held_item_slot_changed', slot, item)
 
-    logAction('[inventory-actions]', 'mob_equipment', {
+    botState.logAction?.('[inventory-actions]', 'mob_equipment', {
       slot,
       item: item ? `${item.name} x${item.count}` : 'empty'
     })

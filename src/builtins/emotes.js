@@ -2,7 +2,6 @@
 
 const {
   findEntityByRuntimeId,
-  logAction,
   selfRuntimeEntityId,
   toRuntimeId
 } = require('../utils')
@@ -52,7 +51,7 @@ module.exports = function emotesPlugin (botState, options = {}) {
       emote_pieces: emotePieces
     })
 
-    logAction('[emote]', 'emote_list', { count: emotePieces.length })
+    botState.logAction?.('[emote]', 'emote_list', { count: emotePieces.length })
     return emotePieces
   }
 
@@ -90,7 +89,7 @@ module.exports = function emotesPlugin (botState, options = {}) {
       sentAt: Date.now()
     }
 
-    logAction('[emote]', 'send', {
+    botState.logAction?.('[emote]', 'send', {
       entity_id: String(packet.entity_id),
       emote_id: packet.emote_id,
       length: packet.emote_length_ticks

@@ -1,7 +1,5 @@
 'use strict'
 
-const { logAction } = require('../utils')
-
 const DAY_TICKS = 24000
 
 function normalizeTimeOfDay (time) {
@@ -61,7 +59,7 @@ module.exports = function environmentPlugin (botState) {
       rawPacket
     }
 
-    logAction('[environment]', 'time', {
+    botState.logAction?.('[environment]', 'time', {
       time: payload.time,
       timeOfDay: payload.timeOfDay,
       day: payload.day
@@ -82,7 +80,7 @@ module.exports = function environmentPlugin (botState) {
       rawPacket
     }
 
-    logAction('[environment]', 'weather', {
+    botState.logAction?.('[environment]', 'weather', {
       raining: payload.raining,
       thundering: payload.thundering,
       rainLevel: payload.rainLevel,

@@ -2,7 +2,7 @@
 // Auto-loaded by plugin-loader.
 // Provides botState.dig(block).
 
-const { blockFaceFromEye, blockFaceFromVector, logAction, toVec3i } = require('../utils')
+const { blockFaceFromEye, blockFaceFromVector, toVec3i } = require('../utils')
 
 module.exports = (botState, options = {}) => {
   const digState = {
@@ -131,7 +131,7 @@ module.exports = (botState, options = {}) => {
       appendBlockActions(packet, actions, digState.target, digState.face)
 
       if (actions.includes('predict_break')) {
-        logAction('[dig]', 'predict break', {
+        botState.logAction?.('[dig]', 'predict break', {
           pos: digState.target.toString(),
           dugMs: Date.now() - digState.startTime,
           dugTicks: elapsedTicks
@@ -180,7 +180,7 @@ module.exports = (botState, options = {}) => {
       installDigHook()
       armDigTimeout(ms)
 
-      logAction('[dig]', 'start break', {
+      botState.logAction?.('[dig]', 'start break', {
         block: block.name,
         pos: pos.toString(),
         digMs: ms,
@@ -212,7 +212,7 @@ module.exports = (botState, options = {}) => {
       pos.z !== digState.target.z
     ) return
 
-    logAction('[dig]', 'block updated while digging', {
+    botState.logAction?.('[dig]', 'block updated while digging', {
       pos: digState.target.toString()
     })
 
