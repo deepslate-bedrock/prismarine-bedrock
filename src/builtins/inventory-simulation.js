@@ -62,7 +62,7 @@ function fullContainerId (slotInfo) {
 function slotIndexForStackRequest (slotInfo, state = null) {
   const containerId = fullContainerId(slotInfo)
   if (containerId === 'cursor') return null
-  if (containerId === 'inventory') return slotInfo.slot + 9
+  if (containerId === 'inventory') return slotInfo.slot
   if (containerId === 'hotbar' || containerId === 'hotbar_and_inventory') return slotInfo.slot
   if (containerId === 'armor' || containerId === 'offhand') return slotInfo.slot
   if (containerId === 'container' || containerId === 'crafting_input' || containerId === 'creative_output') return slotInfo.slot

@@ -1,6 +1,13 @@
 const assert = require("assert");
 const BotState = require("../../src/state");
-const { clearPlayer, givePlayer, setPlayerGamemode } = require("../helpers/commands");
+const {
+  bedrockPlayerName,
+  clearPlayer,
+  currentCommandTargetFamily,
+  givePlayer,
+  sendCommand,
+  setPlayerGamemode
+} = require("../helpers/commands");
 const {
   HOST,
   PORT,
@@ -41,6 +48,32 @@ async function setupInventory(botState) {
 
 function itemAt(botState, slot) {
   return botState.inventory.slots[slot];
+}
+
+function assertInventorySlot(botState, slot, expectedName, expectedCount) {
+  return assertSlot(botState.inventory, slot, expectedName, expectedCount);
+}
+
+function replacePlayerItem(botState, logicalSlot, itemName, count) {
+  const container = logicalSlot < 9 ? 'hotbar' : 'inventory';
+  const commandSlot = logicalSlot < 9 ? logicalSlot : logicalSlot - 9;
+  const player = bedrockPlayerName(USERNAME);
+
+  if (currentCommandTargetFamily() === 'endstone') {
+    sendCommand(botState, `replaceitem entity ${player} slot.${container} ${commandSlot} minecraft:${itemName} ${count}`);
+  } else {
+    sendCommand(botState, `item replace entity ${player} ${container}.${commandSlot} with minecraft:${itemName} ${count}`);
+  }
+}
+
+async function setupBoundaryInventory(botState, mainSlot = 9) {
+  clearPlayer(botState, USERNAME);
+  await sleep(SETUP_DELAY_MS);
+  replacePlayerItem(botState, 0, "diamond", 3);
+  replacePlayerItem(botState, mainSlot, "stick", 5);
+  await sleep(SETUP_DELAY_MS);
+  assertInventorySlot(botState, 0, "diamond", 3);
+  assertInventorySlot(botState, mainSlot, "stick", 5);
 }
 
 function emptySlots(botState) {
@@ -190,6 +223,48 @@ describe("real inventory actions", function () {
 
     assertSlot(botState.inventory, diamondSlot, "stick", 5);
     assertSlot(botState.inventory, stickSlot, "diamond", 3);
+  });
+
+  it("swaps occupied slots 0 and 9 through the native cursor sequence", async function () {
+    await setupBoundaryInventory(botState);
+
+    await assertActionProducesPackets(botState, "swapInventorySlots hotbar boundary", () => {
+      return botState.inventory.swap(0, 9);
+    });
+
+    assertInventorySlot(botState, 0, "stick", 5);
+    assertInventorySlot(botState, 9, "diamond", 3);
+  });
+
+  it("equips logical slot 9 through the native cursor sequence", async function () {
+    await setupBoundaryInventory(botState);
+
+    await assertActionProducesPackets(botState, "inventory.equip hotbar boundary", () => {
+      return botState.inventory.equip(9, 0);
+    });
+
+    assertInventorySlot(botState, 0, "stick", 5);
+    assertInventorySlot(botState, 9, "diamond", 3);
+    assert.strictEqual(botState.heldItemSlot, 0);
+    assert.strictEqual(botState.heldItem?.name, "stick");
+  });
+
+  it("batches a move from logical slot 18 into hotbar slot 0", async function () {
+    clearPlayer(botState, USERNAME);
+    await sleep(SETUP_DELAY_MS);
+    replacePlayerItem(botState, 18, "stick", 5);
+    await sleep(SETUP_DELAY_MS);
+    assertInventorySlot(botState, 0, null, 0);
+    assertInventorySlot(botState, 18, "stick", 5);
+
+    await assertActionProducesPackets(botState, "inventory action main-slot batch", () => {
+      return botState.inventory.actions.batch((inventory) => {
+        inventory.move(18, 0);
+      });
+    });
+
+    assertInventorySlot(botState, 0, "stick", 5);
+    assertInventorySlot(botState, 18, null, 0);
   });
 
   it("moves an occupied slot into an empty slot using item_stack_request", async function () {

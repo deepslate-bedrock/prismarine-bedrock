@@ -14,8 +14,18 @@ function createBotState () {
   const queuedRequests = []
 
   botState.client = new EventEmitter()
+  botState.client.entityId = 1n
   botState.client.queue = (name, payload) => {
     if (name === 'item_stack_request') queuedRequests.push(...payload.requests)
+    if (name === 'interact') {
+      queueMicrotask(() => botState.client.emit('container_open', {
+        window_id: 2,
+        window_type: 'inventory'
+      }))
+    }
+    if (name === 'container_close') {
+      queueMicrotask(() => botState.client.emit('container_close', payload))
+    }
   }
   botState.itemClass = require('prismarine-item')(registry)
   botState.windowFactory = require('prismarine-windows')(registry)
@@ -147,7 +157,7 @@ describe('predictive inventory actions', function () {
       inv.split(0, 1)
       inv.move(1, 9)
     })
-    await Promise.resolve()
+    await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(botState.queuedRequests.length, 2)
     const [split, move] = botState.queuedRequests

@@ -36,7 +36,170 @@ describe('inventory mirror', function () {
     assert.strictEqual(typeof botState.inventory.actions.sendStandalone, 'function')
     assert.strictEqual(typeof botState.inventory.actions.wait, 'function')
     assert.strictEqual(typeof botState.inventory.actions.waitRaw, 'function')
+    assert.strictEqual(typeof botState.inventory.actions.batch, 'function')
     assert.strictEqual(typeof botState.inventory.actions.makeRequest, 'function')
+  })
+
+  it('swaps occupied hotbar and main-inventory slots through the recorded cursor sequence', async function () {
+    const botState = createBotState()
+    const requests = []
+    const lifecycle = []
+    botState.client.entityId = 1n
+
+    botState.client.queue = (name, params) => {
+      if (name === 'interact') {
+        lifecycle.push(params.action_id)
+        queueMicrotask(() => botState.client.emit('container_open', {
+          window_id: 2,
+          window_type: 'inventory'
+        }))
+        return
+      }
+      if (name === 'container_close') {
+        lifecycle.push(name)
+        queueMicrotask(() => botState.client.emit('container_close', params))
+        return
+      }
+
+      assert.strictEqual(name, 'item_stack_request')
+      const request = params.requests[0]
+      requests.push(request)
+
+      const responseContainers = request.actions[0].type_id === 'take'
+        ? [
+            { slot_type: { container_id: 'inventory' }, slots: [{ slot: 9, count: 0, item_stack_id: 0 }] },
+            { slot_type: { container_id: 'cursor' }, slots: [{ slot: 0, count: 5, item_stack_id: 22 }] }
+          ]
+        : request.actions[0].type_id === 'swap'
+          ? [
+              { slot_type: { container_id: 'cursor' }, slots: [{ slot: 0, count: 3, item_stack_id: 11 }] },
+              { slot_type: { container_id: 'hotbar' }, slots: [{ slot: 0, count: 5, item_stack_id: 22 }] }
+            ]
+          : [
+              { slot_type: { container_id: 'cursor' }, slots: [{ slot: 0, count: 0, item_stack_id: 0 }] },
+              { slot_type: { container_id: 'inventory' }, slots: [{ slot: 9, count: 3, item_stack_id: 11 }] }
+            ]
+
+      queueMicrotask(() => botState.client.emit('item_stack_response', {
+        responses: [{
+          request_id: request.request_id,
+          status: 'ok',
+          containers: responseContainers
+        }]
+      }))
+    }
+
+    injectInventoryActions(botState, {})
+    injectInventory(botState, {})
+
+    const diamond = new botState.itemClass(1, 3, 0, null, 11)
+    diamond.stackId = 11
+    diamond.stack_id = 11
+    const stick = new botState.itemClass(2, 5, 0, null, 22)
+    stick.stackId = 22
+    stick.stack_id = 22
+    botState.inventory.updateSlot(0, diamond)
+    botState.inventory.updateSlot(9, stick)
+
+    await botState.inventory.swap(0, 9)
+
+    assert.deepStrictEqual(lifecycle, ['open_inventory', 'container_close'])
+    assert.deepStrictEqual(requests.map(request => ({
+      request_id: request.request_id,
+      action: request.actions[0]
+    })), [
+      {
+        request_id: -1001,
+        action: {
+          type_id: 'take',
+          count: 5,
+          source: { slot_type: { container_id: 'inventory' }, slot: 9, stack_id: 22 },
+          destination: { slot_type: { container_id: 'cursor' }, slot: 0, stack_id: 0 }
+        }
+      },
+      {
+        request_id: -1003,
+        action: {
+          type_id: 'swap',
+          source: { slot_type: { container_id: 'cursor' }, slot: 0, stack_id: 22 },
+          destination: { slot_type: { container_id: 'hotbar' }, slot: 0, stack_id: 11 }
+        }
+      },
+      {
+        request_id: -1005,
+        action: {
+          type_id: 'place',
+          count: 3,
+          source: { slot_type: { container_id: 'cursor' }, slot: 0, stack_id: 11 },
+          destination: { slot_type: { container_id: 'inventory' }, slot: 9, stack_id: 0 }
+        }
+      }
+    ])
+    assert(requests.every(request => request.cause === -1))
+    assert.strictEqual(botState.inventory.slots[0].type, 2)
+    assert.strictEqual(botState.inventory.slots[0].count, 5)
+    assert.strictEqual(botState.inventory.slots[9].type, 1)
+    assert.strictEqual(botState.inventory.slots[9].count, 3)
+  })
+
+  it('batches a move from logical main-inventory slot 18 into hotbar slot 0', async function () {
+    const botState = createBotState()
+    const requests = []
+    const lifecycle = []
+    botState.client.entityId = 1n
+
+    botState.client.queue = (name, params) => {
+      if (name === 'interact') {
+        lifecycle.push(params.action_id)
+        queueMicrotask(() => botState.client.emit('container_open', {
+          window_id: 2,
+          window_type: 'inventory'
+        }))
+        return
+      }
+      if (name === 'container_close') {
+        lifecycle.push(name)
+        queueMicrotask(() => botState.client.emit('container_close', params))
+        return
+      }
+
+      const request = params.requests[0]
+      requests.push(request)
+      queueMicrotask(() => botState.client.emit('item_stack_response', {
+        responses: [{
+          request_id: request.request_id,
+          status: 'ok',
+          containers: [
+            { slot_type: { container_id: 'inventory' }, slots: [{ slot: 18, count: 0, item_stack_id: 0 }] },
+            { slot_type: { container_id: 'hotbar' }, slots: [{ slot: 0, count: 5, item_stack_id: 22 }] }
+          ]
+        }]
+      }))
+    }
+
+    injectInventoryActions(botState, {})
+    injectInventory(botState, {})
+
+    const stick = new botState.itemClass(2, 5, 0, null, 22)
+    stick.stackId = 22
+    stick.stack_id = 22
+    botState.inventory.updateSlot(18, stick)
+
+    await botState.inventory.actions.batch(inventory => {
+      inventory.move(18, 0)
+    })
+
+    assert.deepStrictEqual(lifecycle, ['open_inventory', 'container_close'])
+    assert.strictEqual(requests.length, 1)
+    assert.deepStrictEqual(requests[0].actions, [{
+      type_id: 'take',
+      count: 5,
+      source: { slot_type: { container_id: 'inventory' }, slot: 18, stack_id: 22 },
+      destination: { slot_type: { container_id: 'hotbar' }, slot: 0, stack_id: 0 }
+    }])
+    assert.strictEqual(botState.inventory.slots[0].type, 2)
+    assert.strictEqual(botState.inventory.slots[0].count, 5)
+    assert.strictEqual(botState.inventory.slots[18], null)
   })
 
   it('mirrors armor and offhand as persistent windows while keeping ui as a slot map', function () {

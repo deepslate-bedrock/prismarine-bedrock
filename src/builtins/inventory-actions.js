@@ -142,17 +142,95 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   function playerProtocolSlot (slot) {
-    return isHotbarSlot(slot) ? slot : slot - 9
+    return slot
   }
 
   function playerSlotIndexForContainer (containerId, slot) {
-    if (containerId === 'inventory') return slot + 9
     return slot
   }
 
   function playerStackRequestSlotInfo (slot, item, containerId = null) {
     if (containerId) return stackSlotInfo(containerId, slot, item)
     return stackSlotInfo(isHotbarSlot(slot) ? 'hotbar' : 'inventory', playerProtocolSlot(slot), item)
+  }
+
+  async function openPlayerInventoryForAction () {
+    const activeWindow = typeof botState.getWindow === 'function'
+      ? botState.getWindow(botState.activeWindowId)
+      : null
+    if (activeWindow?.windowType === 'inventory') return null
+
+    const runtimeEntityId = selfRuntimeEntityId(botState)
+    if (runtimeEntityId == null) {
+      throw new Error('Cannot open player inventory before self entity is known')
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error('Timed out waiting for player inventory container_open'))
+      }, inventoryUpdateTimeoutMs)
+
+      function onOpen (packet) {
+        if (packet.window_type !== 'inventory') return
+        cleanup()
+        resolve(packet.window_id)
+      }
+
+      function cleanup () {
+        clearTimeout(timeout)
+        client.off('container_open', onOpen)
+      }
+
+      client.on('container_open', onOpen)
+      client.queue('interact', {
+        action_id: 'open_inventory',
+        target_entity_id: runtimeEntityId,
+        has_position: false
+      })
+    })
+  }
+
+  async function closePlayerInventoryAfterAction (windowId) {
+    if (windowId == null) return
+
+    await new Promise(resolve => {
+      const timeout = setTimeout(cleanup, inventoryUpdateTimeoutMs)
+
+      function onClose (packet) {
+        if (packet.window_id !== windowId) return
+        cleanup()
+      }
+
+      function cleanup () {
+        clearTimeout(timeout)
+        client.off('container_close', onClose)
+        resolve()
+      }
+
+      client.on('container_close', onClose)
+      client.queue('container_close', {
+        window_id: windowId,
+        window_type: 'inventory',
+        server: false
+      })
+    })
+  }
+
+  async function withPlayerInventoryOpen (fn) {
+    const openedWindowId = await openPlayerInventoryForAction()
+    try {
+      return await fn()
+    } finally {
+      await closePlayerInventoryAfterAction(openedWindowId)
+    }
+  }
+
+  function requestUsesMainInventory (request) {
+    return request.actions?.some(action =>
+      action.source?.slot_type?.container_id === 'inventory' ||
+      action.destination?.slot_type?.container_id === 'inventory'
+    ) ?? false
   }
 
   function currentPredictionState () {
@@ -599,16 +677,20 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   async function sendPredictedInventoryRequest (request, prediction) {
     if (activeBatch) return recordBatchedPrediction(request, prediction)
 
-    const transaction = startPendingTransaction(request, prediction)
-    try {
-      const id = sendItemStackRequest(request)
-      const response = await waitForItemStackResponse(id)
-      reconcileAcceptedPrediction(transaction, response)
-      return response
-    } catch (err) {
-      if (pendingTransactions.has(request.request_id)) throw rollbackPrediction(transaction, err.response, err)
-      throw err
+    const send = async () => {
+      const transaction = startPendingTransaction(request, prediction)
+      try {
+        const id = sendItemStackRequest(request)
+        const response = await waitForItemStackResponse(id)
+        reconcileAcceptedPrediction(transaction, response)
+        return response
+      } catch (err) {
+        if (pendingTransactions.has(request.request_id)) throw rollbackPrediction(transaction, err.response, err)
+        throw err
+      }
     }
+
+    return requestUsesMainInventory(request) ? withPlayerInventoryOpen(send) : send()
   }
 
   async function sendPredictedInventoryRequests (requests, predictions) {
@@ -625,6 +707,25 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       }
       throw err
     }
+  }
+
+  async function sendSequentialPredictedInventoryRequests (requests, predictions) {
+    const responses = []
+    for (let i = 0; i < requests.length; i++) {
+      const request = requests[i]
+      const transaction = startPendingTransaction(request, predictions[i])
+      try {
+        const responsePromise = waitForItemStackResponse(request.request_id)
+        sendItemStackRequest(request)
+        const response = await responsePromise
+        reconcileAcceptedPrediction(transaction, response)
+        responses.push(response)
+      } catch (err) {
+        if (pendingTransactions.has(request.request_id)) throw rollbackPrediction(transaction, err.response, err)
+        throw err
+      }
+    }
+    return responses
   }
 
   async function transactInventory (request, changedSlots = []) {
@@ -689,6 +790,11 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   function swapInventorySlots (slotA, slotB) {
+    assertInventorySlot(slotA, 'slotA')
+    assertInventorySlot(slotB, 'slotB')
+
+    if (slotA === slotB) return Promise.resolve(null)
+
     const itemA = itemAt(slotA)
     const itemB = itemAt(slotB)
     if (!itemA && !itemB) {
@@ -704,14 +810,47 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     if (!itemB) return moveInventorySlot(slotA, slotB)
     if (!itemA) return moveInventorySlot(slotB, slotA)
 
-    const source = playerStackRequestSlotInfo(slotA, itemAt(slotA))
-    const destination = playerStackRequestSlotInfo(slotB, itemAt(slotB))
+    if (activeBatch) return queueOccupiedSwap(slotA, slotB)
+    return withPlayerInventoryOpen(() => performOccupiedSwap(slotA, slotB))
+  }
 
-    const request = makeRequest([
-      swapAction(source, destination)
+  function queueOccupiedSwap (slotA, slotB) {
+    const requests = []
+    activeBatch.sequential = true
+
+    const takeRequest = makeRequest([
+      takeAction(itemAt(slotB).count, playerStackRequestSlotInfo(slotB, itemAt(slotB)), cursorSlotInfo(null))
     ])
+    requests.push(transactInventory(takeRequest, [slotB]))
 
-    return transactInventory(request, [slotA, slotB])
+    const swapRequest = makeRequest([
+      swapAction(cursorSlotInfo(), playerStackRequestSlotInfo(slotA, itemAt(slotA)))
+    ])
+    requests.push(transactInventory(swapRequest, [slotA]))
+
+    const placeRequest = makeRequest([
+      placeAction(currentPredictionState().cursor.count, cursorSlotInfo(), playerStackRequestSlotInfo(slotB, itemAt(slotB)))
+    ])
+    requests.push(transactInventory(placeRequest, [slotB]))
+
+    return Promise.all(requests)
+  }
+
+  async function performOccupiedSwap (slotA, slotB) {
+    const takeRequest = makeRequest([
+      takeAction(itemAt(slotB).count, playerStackRequestSlotInfo(slotB, itemAt(slotB)), cursorSlotInfo(null))
+    ])
+    await transactInventory(takeRequest, [slotB])
+
+    const swapRequest = makeRequest([
+      swapAction(cursorSlotInfo(), playerStackRequestSlotInfo(slotA, itemAt(slotA)))
+    ])
+    await transactInventory(swapRequest, [slotA])
+
+    const placeRequest = makeRequest([
+      placeAction(currentPredictionState().cursor.count, cursorSlotInfo(), playerStackRequestSlotInfo(slotB, itemAt(slotB)))
+    ])
+    return transactInventory(placeRequest, [slotB])
   }
 
   async function equipItem (slot, hotbarSlot = 0) {
@@ -926,7 +1065,8 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       predictedCursor: cloneStack(predictedCursor),
       virtualCursor: cloneVirtualCursor(virtualCursor),
       touchedSlots: new Set(),
-      cursorTouched: false
+      cursorTouched: false,
+      sequential: false
     }
 
     activeBatch = batch
@@ -962,7 +1102,12 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       changedSlots: [...batch.touchedSlots],
       cursorChanged: batch.cursorTouched
     }
-    const responses = await sendPredictedInventoryRequests(batch.requests, batch.predictions)
+    const send = () => batch.sequential
+      ? sendSequentialPredictedInventoryRequests(batch.requests, batch.predictions)
+      : sendPredictedInventoryRequests(batch.requests, batch.predictions)
+    const responses = batch.requests.some(requestUsesMainInventory)
+      ? await withPlayerInventoryOpen(send)
+      : await send()
 
     return {
       request: batch.requests[batch.requests.length - 1],
