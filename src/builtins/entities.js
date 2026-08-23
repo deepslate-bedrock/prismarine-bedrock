@@ -1,5 +1,5 @@
 const Vec3 = require('vec3');
-const { findEntityByRuntimeId, sameRuntimeId } = require('../utils');
+const { findEntityByRuntimeId, findEntityByUniqueId, sameRuntimeId } = require('../utils');
 const {
   applyAbilities,
   applyAdventureSettings,
@@ -181,17 +181,27 @@ module.exports = (botState, options) => {
 
   // ========== Remove entity ==========
   botState.client.on('remove_entity', (packet) => {
-    // packet.entity_id_self is zigzag64, safe to treat as BigInt
-    const key = typeof packet.entity_id_self === 'bigint' ? packet.entity_id_self : BigInt(packet.entity_id_self);
-    const entity = botState.entities.get(key) || botState.playerEntities.get(key);
+    // RemoveActor carries an entity unique ID, while the live maps are keyed by
+    // runtime ID. Some third-party servers use the runtime ID in both fields,
+    // so retain a runtime lookup as a compatibility fallback.
+    const id = packet.entity_id_self;
+    const entity = findEntityByUniqueId(botState, id) || findEntityByRuntimeId(botState, id);
     if (entity) {
       entity.isValid = false;
-      botState.entities.delete(key);
-      botState.playerEntities.delete(key);
+
+      // Delete the exact entity reference rather than assuming either ID is
+      // the key. This also handles lightweight/custom entity implementations.
+      const stores = new Set([botState.entities, botState.playerEntities]);
+      for (const store of stores) {
+        for (const [runtimeId, candidate] of store) {
+          if (candidate === entity) store.delete(runtimeId);
+        }
+      }
+
       if (botState.self === entity) {
         botState.self = null;
       }
-      botState.logAction?.('[→]', 'remove_entity', { id: key });
+      botState.logAction?.('[→]', 'remove_entity', { id });
       botState.emit('entityRemoved', entity);
     }
   });
