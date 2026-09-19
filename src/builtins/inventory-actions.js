@@ -226,10 +226,16 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   }
 
   function requestUsesMainInventory (request) {
-    return request.actions?.some(action =>
-      action.source?.slot_type?.container_id === 'inventory' ||
-      action.destination?.slot_type?.container_id === 'inventory'
-    ) ?? false
+    return request.actions?.some(action => {
+      const sourceContainerId = action.source?.slot_type?.container_id
+      const destinationContainerId = action.destination?.slot_type?.container_id
+      return sourceContainerId === 'inventory' ||
+        sourceContainerId === 'hotbar' ||
+        sourceContainerId === 'hotbar_and_inventory' ||
+        destinationContainerId === 'inventory' ||
+        destinationContainerId === 'hotbar' ||
+        destinationContainerId === 'hotbar_and_inventory'
+    }) ?? false
   }
 
   function currentPredictionState () {
