@@ -2,7 +2,7 @@
 
 const path = require('path')
 
-const DEFAULT_BEDROCK_VERSION = '1.26.10'
+const DEFAULT_BEDROCK_VERSION = '1.26.45'
 
 function normalizeBedrockVersion (version = DEFAULT_BEDROCK_VERSION) {
   const value = String(version || DEFAULT_BEDROCK_VERSION).trim()
