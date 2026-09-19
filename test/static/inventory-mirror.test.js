@@ -113,16 +113,16 @@ describe('inventory mirror', function () {
         action: {
           type_id: 'take',
           count: 5,
-          source: { slot_type: { container_id: 'inventory' }, slot: 9, stack_id: 22 },
-          destination: { slot_type: { container_id: 'cursor' }, slot: 0, stack_id: 0 }
+          source: { slot_type: { container_id: 'inventory', dynamic_container_id: 0 }, slot: 9, stack_id: 22 },
+          destination: { slot_type: { container_id: 'cursor', dynamic_container_id: 0 }, slot: 0, stack_id: 0 }
         }
       },
       {
         request_id: -1003,
         action: {
           type_id: 'swap',
-          source: { slot_type: { container_id: 'cursor' }, slot: 0, stack_id: 22 },
-          destination: { slot_type: { container_id: 'hotbar' }, slot: 0, stack_id: 11 }
+          source: { slot_type: { container_id: 'cursor', dynamic_container_id: 0 }, slot: 0, stack_id: 22 },
+          destination: { slot_type: { container_id: 'hotbar', dynamic_container_id: 0 }, slot: 0, stack_id: 11 }
         }
       },
       {
@@ -130,8 +130,8 @@ describe('inventory mirror', function () {
         action: {
           type_id: 'place',
           count: 3,
-          source: { slot_type: { container_id: 'cursor' }, slot: 0, stack_id: 11 },
-          destination: { slot_type: { container_id: 'inventory' }, slot: 9, stack_id: 0 }
+          source: { slot_type: { container_id: 'cursor', dynamic_container_id: 0 }, slot: 0, stack_id: 11 },
+          destination: { slot_type: { container_id: 'inventory', dynamic_container_id: 0 }, slot: 9, stack_id: 0 }
         }
       }
     ])
@@ -164,6 +164,7 @@ describe('inventory mirror', function () {
 
       assert.strictEqual(name, 'item_stack_request')
       const request = params.requests[0]
+      assert.strictEqual(request.actions[0].source.slot_type.dynamic_container_id, 0)
       queueMicrotask(() => botState.client.emit('item_stack_response', {
         responses: [{
           request_id: request.request_id,
@@ -241,8 +242,8 @@ describe('inventory mirror', function () {
     assert.deepStrictEqual(requests[0].actions, [{
       type_id: 'take',
       count: 5,
-      source: { slot_type: { container_id: 'inventory' }, slot: 18, stack_id: 22 },
-      destination: { slot_type: { container_id: 'hotbar' }, slot: 0, stack_id: 0 }
+      source: { slot_type: { container_id: 'inventory', dynamic_container_id: 0 }, slot: 18, stack_id: 22 },
+      destination: { slot_type: { container_id: 'hotbar', dynamic_container_id: 0 }, slot: 0, stack_id: 0 }
     }])
     assert.strictEqual(botState.inventory.slots[0].type, 2)
     assert.strictEqual(botState.inventory.slots[0].count, 5)

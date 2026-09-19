@@ -4,7 +4,7 @@
 const { buildStatic } = require('mineflayer-crafting-util')
 const recipeLoader = require('prismarine-recipe')
 const registryLoader = require('prismarine-registry')
-const { itemStackId, responseSlot, responseStackId, sleep } = require('../utils')
+const { fullContainerName, itemStackId, responseSlot, responseStackId, sleep } = require('../utils')
 
 const CONTAINER = {
   output: 'creative_output',
@@ -225,7 +225,7 @@ function craftingGridProtocolSlot (craft, gridSlot) {
 
 function craftRequestSlotInfo (containerId, slot, stackId = 0) {
   return {
-    slot_type: { container_id: containerId },
+    slot_type: fullContainerName(containerId, 0),
     slot,
     stack_id: stackId || 0
   }

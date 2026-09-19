@@ -483,7 +483,7 @@ class InventorySimulationState extends EventEmitter {
     for (const container of response?.containers || []) {
       const containerId = container.slot_type?.container_id
       for (const serverSlot of container.slots || []) {
-        const slotInfo = { slot_type: { container_id: containerId }, slot: serverSlot.slot }
+        const slotInfo = { slot_type: { container_id: containerId, dynamic_container_id: 0 }, slot: serverSlot.slot }
         const expected = getPredictedRef(state, slotInfo)
         if ((expected?.count ?? 0) !== serverSlot.count) {
           const label = containerId === 'cursor' ? 'cursor' : (isPlayerContainer(containerId) ? `slot ${slotIndexForStackRequest(slotInfo, state)}` : `${containerId} ${serverSlot.slot}`)

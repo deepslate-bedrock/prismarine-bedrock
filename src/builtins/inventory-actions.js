@@ -26,6 +26,7 @@
 
 const {
   cloneItem,
+  fullContainerName,
   itemStackResponseStatusOk,
   itemToRaw,
   maxStackSize,
@@ -130,7 +131,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
 
   function stackSlotInfo (containerId, slot, item = null) {
     return {
-      slot_type: { container_id: containerId },
+      slot_type: fullContainerName(containerId, 0),
       slot,
       stack_id: stackId(item)
     }
