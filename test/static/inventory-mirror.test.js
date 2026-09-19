@@ -142,6 +142,24 @@ describe('inventory mirror', function () {
     assert.strictEqual(botState.inventory.slots[9].count, 3)
   })
 
+  it('clears the inventory window type after closing the player inventory', function () {
+    const botState = createBotState()
+    injectInventory(botState, {})
+
+    botState.client.emit('container_open', {
+      window_id: 0,
+      window_type: 'inventory'
+    })
+    assert.strictEqual(botState.getWindow(0).windowType, 'inventory')
+
+    botState.client.emit('container_close', {
+      window_id: 0,
+      window_type: 'inventory'
+    })
+
+    assert.strictEqual(botState.getWindow(0).windowType, null)
+  })
+
   it('opens the player inventory when dropping an item from the hotbar', async function () {
     const botState = createBotState()
     const lifecycle = []
