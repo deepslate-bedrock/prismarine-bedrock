@@ -133,6 +133,42 @@ describe('Bedrock rotation mapping', function () {
     assert(Math.abs(botState.self.position.y - (65 + Math.fround(1.6200100183486938))) < 1e-12)
   })
 
+  it('ignores move_entity_delta packets without flags when values are provided directly', function () {
+    const client = createClient()
+    const botState = new EventEmitter()
+    botState.client = client
+    botState.registry = { entitiesArray: [] }
+    botState.entityClass = TestEntity
+    botState.itemClass = { fromNotch: () => null }
+    botState.entities = new Map()
+    botState.playerEntities = new Map()
+    botState.self = new TestEntity(1n)
+    botState.self.runtimeId = 1n
+    botState.self.position = new Vec3(1, 65, 2)
+    botState.playerEntities.set(1n, botState.self)
+
+    installEntities(botState, {})
+
+    client.emit('move_entity_delta', {
+      runtime_entity_id: 1n,
+      x: 2,
+      y: 3,
+      z: 4,
+      rot_x: 64,
+      rot_y: 128,
+      rot_z: 192,
+      on_ground: true
+    })
+
+    assert.strictEqual(botState.self.position.x, 3)
+    assert.strictEqual(botState.self.position.y, 68)
+    assert.strictEqual(botState.self.position.z, 6)
+    assert.strictEqual(botState.self.pitch, (64 / 255) * 360)
+    assert.strictEqual(botState.self.yaw, (128 / 255) * 360)
+    assert.strictEqual(botState.self.headYaw, (192 / 255) * 360)
+    assert.strictEqual(botState.self.onGround, true)
+  })
+
   it('does not change look rotation when entities handles movement correction', function () {
     const client = createClient()
     const botState = new EventEmitter()
