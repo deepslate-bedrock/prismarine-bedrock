@@ -81,7 +81,7 @@ custom bootstrapping need manual control.
 | Option | Default | Notes |
 | --- | --- | --- |
 | `version` | package default Bedrock version | Normalized through `normalizeBedrockVersion`. |
-| `loggingEnabled` | `true` | Controls this bot's `bot.logAction` output. Accepts booleans and boolean-like strings. |
+| `loggingEnabled` | `true` | Controls this bot's runtime logging output, including `bot.logAction` and built-in warnings/errors. Accepts booleans and boolean-like strings. |
 | `worldDecodeEnabled` | `true` | Enables world/chunk decode and chunk requests. |
 | `physicsEnabled` | same as `worldDecodeEnabled` | Requires `worldDecodeEnabled: true`. Disable for packet-only bots. |
 | `physicsEngine` | `'native'` | Supports `'native'`, `'nxg'`, and alias `'nxg-org'`. |

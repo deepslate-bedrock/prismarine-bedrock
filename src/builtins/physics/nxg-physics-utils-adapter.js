@@ -44,6 +44,8 @@ const SelfEntityProxy = require('./self-entity-proxy')
 const DEFAULT_LOG_PREFIX = '[bedrock-physics-adapter]';
 
 function createLogger(options = {}) {
+  if (options.loggingEnabled === false) return noop;
+
   const enabled =
     options.debugBedrockPhysicsAdapter === true ||
     options.debugMovementPackets === true ||

@@ -12,20 +12,42 @@ function safeJson (value, fallback, space) {
   }
 }
 
+function createLogger (enabled = true, prefix = '') {
+  const noop = () => {}
+
+  if (enabled === false) {
+    return {
+      log: noop,
+      warn: noop,
+      error: noop
+    }
+  }
+
+  const formatArgs = (args) => (prefix ? [prefix, ...args] : args)
+
+  return {
+    log: (...args) => console.log(...formatArgs(args)),
+    warn: (...args) => console.warn(...formatArgs(args)),
+    error: (...args) => console.error(...formatArgs(args))
+  }
+}
+
 function createActionLogger (enabled = true) {
   let seq = 0
+  const logger = createLogger(enabled)
 
   return function logAction (dir, packetName, detail = '') {
     if (enabled === false) return
 
     const ts = new Date().toISOString().slice(11, 23)
     const renderedDetail = detail ? ' ' + safeJson(detail) : ''
-    console.log(`[${ts}] [#${++seq}] ${dir} ${packetName}${renderedDetail}`)
+    logger.log(`[${ts}] [#${++seq}] ${dir} ${packetName}${renderedDetail}`)
   }
 }
 
 module.exports = {
   jsonSafeReplacer,
   safeJson,
+  createLogger,
   createActionLogger
 }

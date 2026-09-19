@@ -56,6 +56,34 @@ describe('runtime options', function () {
     }
   })
 
+  it('suppresses runtime console output when logging is disabled', function () {
+    const originalLog = console.log
+    const originalWarn = console.warn
+    const originalError = console.error
+    const calls = []
+
+    try {
+      console.log = (...args) => calls.push(['log', args])
+      console.warn = (...args) => calls.push(['warn', args])
+      console.error = (...args) => calls.push(['error', args])
+
+      const bot = new BotState({
+        username: 'RuntimeOptionsBot',
+        loggingEnabled: false
+      })
+
+      bot.logger.log('[bot]', 'hidden event')
+      bot.logger.warn('[physics]', 'hidden warning')
+      bot.logger.error('[world]', 'hidden error')
+
+      assert.deepStrictEqual(calls, [])
+    } finally {
+      console.log = originalLog
+      console.warn = originalWarn
+      console.error = originalError
+    }
+  })
+
   it('supports selecting the nxg physics wrapper', function () {
     const bot = new BotState({
       username: 'RuntimeOptionsBot',
