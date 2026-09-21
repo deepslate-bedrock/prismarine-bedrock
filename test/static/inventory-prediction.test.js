@@ -124,7 +124,7 @@ describe('predictive inventory actions', function () {
       inv.split(0, 1)
       inv.merge(0, 1)
     })
-    await Promise.resolve()
+    await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(botState.queuedRequests.length, 1)
     const request = botState.queuedRequests[0]
@@ -185,7 +185,7 @@ describe('predictive inventory actions', function () {
     botState.inventory.updateSlot(1, null)
 
     const pickupPromise = botState.inventory.pickup(0)
-    await Promise.resolve()
+    await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(botState.queuedRequests.length, 0)
     assert.strictEqual(botState.inventory.cursor.name, 'stick')
@@ -199,7 +199,7 @@ describe('predictive inventory actions', function () {
     assertSlot(botState.inventory.slots, 0, 'stick', 5, 12)
 
     const placePromise = botState.inventory.placeCursor(1)
-    await Promise.resolve()
+    await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(botState.queuedRequests.length, 1)
     const placeRequest = botState.queuedRequests[0]
@@ -231,7 +231,7 @@ describe('predictive inventory actions', function () {
     })
 
     const movePromise = botState.moveOneInventoryItem(0, 1)
-    await Promise.resolve()
+    await new Promise(resolve => setImmediate(resolve))
     const request = botState.queuedRequests[0]
 
     emitStackResponse(botState, request, [
@@ -284,7 +284,7 @@ describe('predictive inventory actions', function () {
     botState.inventory.updateSlot(0, makeItem(botState, 'dirt', 7, 10))
 
     const destroyPromise = botState.inventory.destroy(0)
-    await Promise.resolve()
+    await new Promise(resolve => setImmediate(resolve))
 
     const request = botState.queuedRequests[0]
     assert.deepStrictEqual(request.actions.map(action => action.type_id), ['destroy'])

@@ -51,7 +51,6 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   const pendingResponses = new Map()
   const pendingSlotUpdates = new Set()
   const pendingTransactions = new Map()
-  let mainInventoryActionDepth = 0
 
   let predictedSlots = []
   let predictedCursor = null
@@ -155,63 +154,75 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     return stackSlotInfo(isHotbarSlot(slot) ? 'hotbar' : 'inventory', playerProtocolSlot(slot), item)
   }
 
-  function openPlayerInventoryForAction () {
-    if (mainInventoryActionDepth > 0) {
-      return { windowId: botState.activeWindowId ?? 0, didOpen: false }
-    }
+  async function openPlayerInventoryForAction () {
+    const activeWindow = typeof botState.getWindow === 'function'
+      ? botState.getWindow(botState.activeWindowId)
+      : null
+    if (activeWindow?.windowType === 'inventory') return null
 
     const runtimeEntityId = selfRuntimeEntityId(botState)
     if (runtimeEntityId == null) {
       throw new Error('Cannot open player inventory before self entity is known')
     }
 
-    mainInventoryActionDepth += 1
-    const windowId = botState.activeWindowId ?? 0
-    client.queue('interact', {
-      action_id: 'open_inventory',
-      target_entity_id: runtimeEntityId,
-      has_position: false
-    })
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error('Timed out waiting for player inventory container_open'))
+      }, inventoryUpdateTimeoutMs)
 
-    return { windowId, didOpen: true }
+      function onOpen (packet) {
+        if (packet.window_type !== 'inventory') return
+        cleanup()
+        resolve(packet.window_id)
+      }
+
+      function cleanup () {
+        clearTimeout(timeout)
+        client.off('container_open', onOpen)
+      }
+
+      client.on('container_open', onOpen)
+      client.queue('interact', {
+        action_id: 'open_inventory',
+        target_entity_id: runtimeEntityId,
+        has_position: false
+      })
+    })
   }
 
   async function closePlayerInventoryAfterAction (windowId) {
     if (windowId == null) return
 
-    try {
-      await new Promise(resolve => {
-        const timeout = setTimeout(cleanup, inventoryUpdateTimeoutMs)
+    await new Promise(resolve => {
+      const timeout = setTimeout(cleanup, inventoryUpdateTimeoutMs)
 
-        function onClose (packet) {
-          if (packet.window_id !== windowId) return
-          cleanup()
-        }
+      function onClose (packet) {
+        if (packet.window_id !== windowId) return
+        cleanup()
+      }
 
-        function cleanup () {
-          clearTimeout(timeout)
-          client.off('container_close', onClose)
-          resolve()
-        }
+      function cleanup () {
+        clearTimeout(timeout)
+        client.off('container_close', onClose)
+        resolve()
+      }
 
-        client.on('container_close', onClose)
-        client.queue('container_close', {
-          window_id: windowId,
-          window_type: 'inventory',
-          server: false
-        })
+      client.on('container_close', onClose)
+      client.queue('container_close', {
+        window_id: windowId,
+        window_type: 'inventory',
+        server: false
       })
-    } finally {
-      mainInventoryActionDepth = Math.max(0, mainInventoryActionDepth - 1)
-    }
+    })
   }
 
   async function withPlayerInventoryOpen (fn) {
-    const { windowId, didOpen } = openPlayerInventoryForAction()
+    const openedWindowId = await openPlayerInventoryForAction()
     try {
       return await fn()
     } finally {
-      if (didOpen) await closePlayerInventoryAfterAction(windowId)
+      await closePlayerInventoryAfterAction(openedWindowId)
     }
   }
 
@@ -1042,7 +1053,19 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       changedSlots: [...new Set([virtual.sourceSlot, slot])],
       cursorChanged: true
     }
+
+    if (activeBatch) {
+      activeBatch.predictedSlots = cloneSlots(slots)
+      activeBatch.predictedCursor = cloneStack(remainingCursor)
+      activeBatch.touchedSlots.add(virtual.sourceSlot)
+      activeBatch.touchedSlots.add(slot)
+      activeBatch.cursorTouched = true
+    } else {
+      predictedSlots = cloneSlots(slots)
+      predictedCursor = cloneStack(remainingCursor)
+    }
     setCurrentVirtualCursor(remainingVirtual)
+    publishPrediction(prediction)
 
     return sendPredictedInventoryRequest(request, prediction)
   }

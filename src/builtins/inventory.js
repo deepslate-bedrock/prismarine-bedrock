@@ -61,7 +61,7 @@ function inject (botState, options = {}) {
   botState.uiSlots = uiSlots
 
   const inv = Window.createWindow(INVENTORY_WINDOW_ID, 'minecraft:inventory', 'Inventory', 36)
-  inv.windowType = 'inventory'
+  inv.windowType = null
   windows.set(INVENTORY_WINDOW_ID, inv)
   botState.inventory = inv
 
