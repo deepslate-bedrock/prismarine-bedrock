@@ -483,35 +483,15 @@ async function openCraftingTable (botState, block) {
 function openPlayerInventoryForCrafting (botState, timeoutMs = 5000) {
   const client = botState.client
   const runtimeId = client?.entityId ?? botState.self?.runtimeId ?? 0n
-  const activeWindow = typeof botState.getWindow === 'function'
-    ? botState.getWindow(botState.activeWindowId)
-    : null
+  client.queue('interact', {
+    action_id: 'open_inventory',
+    target_entity_id: runtimeId,
+    has_position: false
+  })
 
-  if (activeWindow?.windowType === 'inventory') return Promise.resolve(activeWindow)
-
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup()
-      reject(new Error('Timed out waiting for inventory container_open'))
-    }, timeoutMs)
-
-    function onOpen (packet) {
-      if (packet.window_type !== 'inventory') return
-      cleanup()
-      resolve(packet)
-    }
-
-    function cleanup () {
-      clearTimeout(timeout)
-      client.off('container_open', onOpen)
-    }
-
-    client.on('container_open', onOpen)
-    client.queue('interact', {
-      action_id: 'open_inventory',
-      target_entity_id: runtimeId,
-      has_position: false
-    })
+  return Promise.resolve({
+    window_id: botState.activeWindowId ?? 0,
+    window_type: 'inventory'
   })
 }
 

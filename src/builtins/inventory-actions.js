@@ -51,6 +51,7 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
   const pendingResponses = new Map()
   const pendingSlotUpdates = new Set()
   const pendingTransactions = new Map()
+  let mainInventoryActionDepth = 0
 
   let predictedSlots = []
   let predictedCursor = null
@@ -154,75 +155,63 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
     return stackSlotInfo(isHotbarSlot(slot) ? 'hotbar' : 'inventory', playerProtocolSlot(slot), item)
   }
 
-  async function openPlayerInventoryForAction () {
-    const activeWindow = typeof botState.getWindow === 'function'
-      ? botState.getWindow(botState.activeWindowId)
-      : null
-    if (activeWindow?.windowType === 'inventory') return null
+  function openPlayerInventoryForAction () {
+    if (mainInventoryActionDepth > 0) {
+      return { windowId: botState.activeWindowId ?? 0, didOpen: false }
+    }
 
     const runtimeEntityId = selfRuntimeEntityId(botState)
     if (runtimeEntityId == null) {
       throw new Error('Cannot open player inventory before self entity is known')
     }
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup()
-        reject(new Error('Timed out waiting for player inventory container_open'))
-      }, inventoryUpdateTimeoutMs)
-
-      function onOpen (packet) {
-        if (packet.window_type !== 'inventory') return
-        cleanup()
-        resolve(packet.window_id)
-      }
-
-      function cleanup () {
-        clearTimeout(timeout)
-        client.off('container_open', onOpen)
-      }
-
-      client.on('container_open', onOpen)
-      client.queue('interact', {
-        action_id: 'open_inventory',
-        target_entity_id: runtimeEntityId,
-        has_position: false
-      })
+    mainInventoryActionDepth += 1
+    const windowId = botState.activeWindowId ?? 0
+    client.queue('interact', {
+      action_id: 'open_inventory',
+      target_entity_id: runtimeEntityId,
+      has_position: false
     })
+
+    return { windowId, didOpen: true }
   }
 
   async function closePlayerInventoryAfterAction (windowId) {
     if (windowId == null) return
 
-    await new Promise(resolve => {
-      const timeout = setTimeout(cleanup, inventoryUpdateTimeoutMs)
+    try {
+      await new Promise(resolve => {
+        const timeout = setTimeout(cleanup, inventoryUpdateTimeoutMs)
 
-      function onClose (packet) {
-        if (packet.window_id !== windowId) return
-        cleanup()
-      }
+        function onClose (packet) {
+          if (packet.window_id !== windowId) return
+          cleanup()
+        }
 
-      function cleanup () {
-        clearTimeout(timeout)
-        client.off('container_close', onClose)
-        resolve()
-      }
+        function cleanup () {
+          clearTimeout(timeout)
+          client.off('container_close', onClose)
+          resolve()
+        }
 
-      client.on('container_close', onClose)
-      client.queue('container_close', {
-        window_id: windowId,
-        window_type: 'inventory',
-        server: false
+        client.on('container_close', onClose)
+        client.queue('container_close', {
+          window_id: windowId,
+          window_type: 'inventory',
+          server: false
+        })
       })
-    })
+    } finally {
+      mainInventoryActionDepth = Math.max(0, mainInventoryActionDepth - 1)
+    }
   }
 
   async function withPlayerInventoryOpen (fn) {
-    const openedWindowId = await openPlayerInventoryForAction()
+    const { windowId, didOpen } = openPlayerInventoryForAction()
     try {
       return await fn()
     } finally {
-      await closePlayerInventoryAfterAction(openedWindowId)
+      if (didOpen) await closePlayerInventoryAfterAction(windowId)
     }
   }
 
