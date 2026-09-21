@@ -149,7 +149,7 @@ module.exports = function bedrockPhysicsPlugin(botState, options = {}) {
       );
       return true;
     } catch (err) {
-      console.warn('[physics] waiting for nearby chunks before physics:', err?.message || err);
+      botState.logger.warn('[physics] waiting for nearby chunks before physics:', err?.message || err);
       return false;
     }
   }
@@ -204,7 +204,7 @@ module.exports = function bedrockPhysicsPlugin(botState, options = {}) {
             nextTickAt = workEnd + tickMs;
           }
         } catch (err) {
-          console.warn('[physics] tick error:', err?.stack || err);
+          botState.logger.warn('[physics] tick error:', err?.stack || err);
         } finally {
           tickInProgress = false;
           if (tickInterval) {

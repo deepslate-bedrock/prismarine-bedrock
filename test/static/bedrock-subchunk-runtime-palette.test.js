@@ -52,12 +52,14 @@ function registryWithStartGame () {
 }
 
 describe('Bedrock 1.26 subchunk runtime palette decoding', function () {
+  const emeraldRuntimeId = registry.blockStates.findIndex(block => block && block.name === 'emerald_block')
+
   it('translates network runtime IDs to Prismarine block state IDs', function () {
     const subchunk = new SubChunk(registry, Block, { y: 0 })
-    subchunk.decode(StorageType.Runtime, singleValueSubchunk(3610))
+    subchunk.decode(StorageType.Runtime, singleValueSubchunk(emeraldRuntimeId))
 
     const block = subchunk.getBlock(undefined, 0, 0, 0, 0)
-    assert.strictEqual(registry.blockStates[3610].name, 'emerald_block')
+    assert.strictEqual(registry.blockStates[emeraldRuntimeId].name, 'emerald_block')
     assert.strictEqual(block.name, 'emerald_block')
     assert.strictEqual(block.stateId, registry.blocksByName.emerald_block.defaultState)
   })
@@ -65,7 +67,7 @@ describe('Bedrock 1.26 subchunk runtime palette decoding', function () {
   it('uses the 1.26 subchunk decoder through chunk network decode paths', async function () {
     const chunk = new Chunk({ x: 0, z: 0 })
 
-    await chunk.networkDecodeSubChunkNoCache(-4, singleValueSubchunk(3610))
+    await chunk.networkDecodeSubChunkNoCache(-4, singleValueSubchunk(emeraldRuntimeId))
 
     const block = chunk.getBlock(new Vec3(0, -64, 0))
     assert.strictEqual(block.name, 'emerald_block')

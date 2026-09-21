@@ -308,7 +308,7 @@ module.exports = (botState, options) => {
 
   // ── Error & close ──
   client.on('error', (err) => {
-    console.error('Client error:', err);
+    botState.logger.error('Client error:', err);
   });
 
   client.on('close', () => {

@@ -59,7 +59,7 @@ function makeUseItemData (botState, slot, item, actionType) {
     action_type: actionType,
     trigger_type: 'player_input',
     block_position: { x: blockPos.x, y: blockPos.y, z: blockPos.z },
-    face: -1,
+    face: 255,
     hotbar_slot: slot,
     held_item: itemToRaw(item, botState.itemClass, { logAction: botState.logAction }),
     player_pos: toVec3f(playerPos),

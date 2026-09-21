@@ -15,11 +15,11 @@ importers:
         specifier: ^1.9.3
         version: 1.9.3
       bedrock-protocol:
-        specifier: ^3.55.0
-        version: 3.56.1
+        specifier: ^3.59.0
+        version: 3.59.0
       minecraft-data:
-        specifier: ^3.109.1
-        version: 3.110.2
+        specifier: ^3.116.0
+        version: 3.116.0
       mineflayer-crafting-util:
         specifier: ^0.5.0
         version: 0.5.0(typescript@4.9.5)
@@ -141,8 +141,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  bedrock-protocol@3.56.1:
-    resolution: {integrity: sha512-H/rd6PVcYxu+w2bEN3e5XoPGGsHA7v2atfh8Bl436KXRXWvGlMoRBPj548bgNhyxewgxCANJxE+MPJP4RWyYYA==}
+  bedrock-protocol@3.59.0:
+    resolution: {integrity: sha512-4kIXAPxq0sBDGL3pQQeZ0lzmP1lLOsOyZ1S7Xt8onstDXPwC0tmgxiV3fwfK2u5KiOBsRecCPXgajAAyp3IATA==}
 
   big-integer@1.6.52:
     resolution: {integrity: sha512-QxD8cf2eVqJOOz63z6JIN9BzvVs/dlySa5HGSBH5xtR8dPteIRQnBxxKqkNTiT6jbDTF6jAfrd4oMcND9RGbQg==}
@@ -522,8 +522,8 @@ packages:
   memory-stream@0.0.3:
     resolution: {integrity: sha512-q0D3m846qY6ZkIt+19ZemU5vH56lpOZZwoJc3AICARKh/menBuayQUjAGPrqtHQQMUYERSdOrej92J9kz7LgYA==}
 
-  minecraft-data@3.110.2:
-    resolution: {integrity: sha512-u0aCCSpQWVreGnZGU/Lu0jmZmc0Y37M0Fvw6eQVQY0BdS/BGRDDU+ug6/qP3QDuZRJCSzi8wNW8ODnOhwpnkpA==}
+  minecraft-data@3.116.0:
+    resolution: {integrity: sha512-2XwQjnAqCdCdhEts6cm1nnmzeeCCbsiAhhuOa6rQOTKceGkwZTE8ZJwO3UeJLwvjEAh8S0/irXN1Xqv/lhceNg==}
 
   minecraft-folder-path@1.2.0:
     resolution: {integrity: sha512-qaUSbKWoOsH9brn0JQuBhxNAzTDMwrOXorwuRxdJKKKDYvZhtml+6GVCUrY5HRiEsieBEjCUnhVpDuQiKsiFaw==}
@@ -1051,12 +1051,12 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  bedrock-protocol@3.56.1:
+  bedrock-protocol@3.59.0:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       jsonwebtoken: 9.0.3
       jsp-raknet: 2.2.0
-      minecraft-data: 3.110.2
+      minecraft-data: 3.116.0
       minecraft-folder-path: 1.2.0
       prismarine-auth: 3.1.1
       prismarine-nbt: 2.8.0
@@ -1207,7 +1207,7 @@ snapshots:
 
   duplexer2@0.1.4:
     dependencies:
-      readable-stream: 2.1.5
+      readable-stream: 2.3.8
 
   eastasianwidth@0.2.0: {}
 
@@ -1432,7 +1432,7 @@ snapshots:
     dependencies:
       readable-stream: 1.0.34
 
-  minecraft-data@3.110.2: {}
+  minecraft-data@3.116.0: {}
 
   minecraft-folder-path@1.2.0: {}
 
@@ -1442,7 +1442,7 @@ snapshots:
 
   mineflayer-pathfinder@2.4.5:
     dependencies:
-      minecraft-data: 3.110.2
+      minecraft-data: 3.116.0
       prismarine-block: 1.23.0
       prismarine-entity: 2.6.0
       prismarine-item: 1.18.0
@@ -1577,7 +1577,7 @@ snapshots:
 
   prismarine-block@1.23.0:
     dependencies:
-      minecraft-data: 3.110.2
+      minecraft-data: 3.116.0
       prismarine-biome: 1.4.0(prismarine-registry@1.12.0)
       prismarine-chat: 1.13.0
       prismarine-item: 1.18.0
@@ -1628,7 +1628,7 @@ snapshots:
 
   prismarine-physics@1.11.0:
     dependencies:
-      minecraft-data: 3.110.2
+      minecraft-data: 3.116.0
       prismarine-nbt: 2.8.0
       vec3: 0.1.10
 
@@ -1642,12 +1642,12 @@ snapshots:
 
   prismarine-recipe@https://codeload.github.com/GenerelSchwerz/prismarine-recipe/tar.gz/e1de58ae7cf713730592b766831a87e0604ad51c(prismarine-registry@1.12.0):
     dependencies:
-      minecraft-data: 3.110.2
+      minecraft-data: 3.116.0
       prismarine-registry: 1.12.0
 
   prismarine-registry@1.12.0:
     dependencies:
-      minecraft-data: 3.110.2
+      minecraft-data: 3.116.0
       prismarine-block: 1.23.0
       prismarine-nbt: 2.8.0
     transitivePeerDependencies:

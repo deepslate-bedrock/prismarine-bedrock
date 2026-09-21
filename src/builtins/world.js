@@ -440,7 +440,7 @@ module.exports = (botState, options = {}) => {
             markFullChunkLoaded(cx, cz);
           }
         })
-        .catch(err => console.error('level_chunk blob decode error:', err));
+        .catch(err => botState.logger.error('level_chunk blob decode error:', err));
     } else if (type === 'subchunk') {
       const allPresent = extraBlobs.every(b => botState.blobCache.has(b.toString()));
       if (!allPresent) return;
@@ -470,7 +470,7 @@ module.exports = (botState, options = {}) => {
             markChunkSectionLoaded(cx, cz, sectionY);
           }
         })
-        .catch(err => console.error('subchunk blob decode error:', err));
+        .catch(err => botState.logger.error('subchunk blob decode error:', err));
     }
 
     botState.pendingBlobRequests.delete(key);
@@ -656,12 +656,12 @@ module.exports = (botState, options = {}) => {
 
         botState.networkChunks.set(chunkKey(cx, cz), chunk);
       } else {
-        console.warn(`level_chunk unknown mode: count=${sectionCount}, cache=${packet.cache_enabled}`);
+        botState.logger.warn(`level_chunk unknown mode: count=${sectionCount}, cache=${packet.cache_enabled}`);
       }
 
       botState.chunkState.count = botState.networkChunks.size;
     } catch (err) {
-      console.error('level_chunk decode error:', err);
+      botState.logger.error('level_chunk decode error:', err);
     }
   });
 
@@ -702,7 +702,7 @@ module.exports = (botState, options = {}) => {
         const blobHash = entry.blob_id;
 
         if (blobHash == null) {
-          console.warn('subchunk cached entry without blob_id');
+          botState.logger.warn('subchunk cached entry without blob_id');
           continue;
         }
 
@@ -764,7 +764,7 @@ module.exports = (botState, options = {}) => {
     const stateId = blockUpdateStateId(blockRuntimeId);
 
     if (stateId === undefined) {
-      console.warn(`Unknown block runtime id ${blockRuntimeId}, skipping`);
+      botState.logger.warn(`Unknown block runtime id ${blockRuntimeId}, skipping`);
       return;
     }
 
@@ -776,7 +776,7 @@ module.exports = (botState, options = {}) => {
     const chunk = await botState.world.getColumnAt(pos);
 
     if (!chunk) {
-      console.warn(`Chunk not loaded at ${pos}, cannot apply block update`);
+      botState.logger.warn(`Chunk not loaded at ${pos}, cannot apply block update`);
       return;
     }
 

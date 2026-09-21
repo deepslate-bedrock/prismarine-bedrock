@@ -251,13 +251,22 @@ module.exports = (botState, options) => {
   botState.client.on('move_entity_delta', (packet) => {
     const entity = findEntityByRuntimeId(botState, packet.runtime_entity_id);
     if (!entity) return;
-    if (packet.flags.has_x) entity.position.x += packet.x;
-    if (packet.flags.has_y) entity.position.y += packet.y;
-    if (packet.flags.has_z) entity.position.z += packet.z;
-    if (packet.flags.has_rot_x) entity.pitch = (packet.rot_x / 255) * 360;
-    if (packet.flags.has_rot_y) entity.yaw = (packet.rot_y / 255) * 360;
-    if (packet.flags.has_rot_z) entity.headYaw = (packet.rot_z / 255) * 360;
-    if (packet.flags.on_ground) entity.onGround = true;
+
+    const flags = packet.flags ?? {};
+    const hasX = flags.has_x ?? packet.has_x ?? (packet.x !== undefined && packet.x !== null);
+    const hasY = flags.has_y ?? packet.has_y ?? (packet.y !== undefined && packet.y !== null);
+    const hasZ = flags.has_z ?? packet.has_z ?? (packet.z !== undefined && packet.z !== null);
+    const hasRotX = flags.has_rot_x ?? packet.has_rot_x ?? (packet.rot_x !== undefined && packet.rot_x !== null);
+    const hasRotY = flags.has_rot_y ?? packet.has_rot_y ?? (packet.rot_y !== undefined && packet.rot_y !== null);
+    const hasRotZ = flags.has_rot_z ?? packet.has_rot_z ?? (packet.rot_z !== undefined && packet.rot_z !== null);
+
+    if (hasX && packet.x !== undefined) entity.position.x += packet.x;
+    if (hasY && packet.y !== undefined) entity.position.y += packet.y;
+    if (hasZ && packet.z !== undefined) entity.position.z += packet.z;
+    if (hasRotX && packet.rot_x !== undefined) entity.pitch = (packet.rot_x / 255) * 360;
+    if (hasRotY && packet.rot_y !== undefined) entity.yaw = (packet.rot_y / 255) * 360;
+    if (hasRotZ && packet.rot_z !== undefined) entity.headYaw = (packet.rot_z / 255) * 360;
+    if ((flags.on_ground ?? packet.on_ground) === true) entity.onGround = true;
   });
 
   // MotionPredictionHints – velocity update from server

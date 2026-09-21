@@ -136,7 +136,7 @@ module.exports = (botState) => {
       action: 'respawn',
       position: { x: 0, y: 0, z: 0 },
       result_position: { x: 0, y: 0, z: 0 },
-      face: -1
+      face: 255
     })
   }
 

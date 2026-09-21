@@ -4,10 +4,11 @@ This directory contains library-facing documentation for `prismarine-bedrock`.
 
 ## Runtime Logging
 
-Prismarine Bedrock action logging is enabled by default for compatibility with
-the existing examples and diagnostics. Each bot owns its `bot.logAction`
-logger. Pass `loggingEnabled: false` when creating a bot to silence that bot's
-action-log output:
+Prismarine Bedrock runtime logging is enabled by default for compatibility with
+the existing examples and diagnostics. Each bot owns a `bot.logger` and a
+`bot.logAction` logger. Pass `loggingEnabled: false` when creating a bot to
+silence that bot's runtime console output, including packet action logs and
+built-in warnings/errors:
 
 ```js
 const { createBot } = require('prismarine-bedrock')
