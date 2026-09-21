@@ -1053,7 +1053,19 @@ module.exports = function inventoryActionsPlugin (botState, options = {}) {
       changedSlots: [...new Set([virtual.sourceSlot, slot])],
       cursorChanged: true
     }
+
+    if (activeBatch) {
+      activeBatch.predictedSlots = cloneSlots(slots)
+      activeBatch.predictedCursor = cloneStack(remainingCursor)
+      activeBatch.touchedSlots.add(virtual.sourceSlot)
+      activeBatch.touchedSlots.add(slot)
+      activeBatch.cursorTouched = true
+    } else {
+      predictedSlots = cloneSlots(slots)
+      predictedCursor = cloneStack(remainingCursor)
+    }
     setCurrentVirtualCursor(remainingVirtual)
+    publishPrediction(prediction)
 
     return sendPredictedInventoryRequest(request, prediction)
   }
