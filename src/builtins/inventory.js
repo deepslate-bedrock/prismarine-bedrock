@@ -395,6 +395,10 @@ function inject (botState, options = {}) {
     const windowType = packet.window_type
     const win = ensureWindow(windowId, windowType)
 
+    if (PERSISTENT_WINDOW_IDS.has(windowId)) {
+      win.windowType = windowType
+    }
+
     setActiveWindow(windowId)
 
     botState.logAction?.('[inventory]', `container_open: id=${windowId}, type=${windowType}, slots=${win.slots.length}`)
@@ -446,9 +450,11 @@ function inject (botState, options = {}) {
       return
     }
 
+    const win = windows.get(windowId)
     if (PERSISTENT_WINDOW_IDS.has(windowId)) {
+      if (win) win.windowType = null
       botState.logAction?.('[inventory]', 'container_close ignored for persistent window', { windowId })
-    } else if (windows.has(windowId)) {
+    } else if (win) {
       botState.logAction?.('[inventory]', `container_close: id=${windowId}`)
       windows.delete(windowId)
     }
