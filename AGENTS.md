@@ -31,7 +31,7 @@ This repo is the clean base library for `prismarine-bedrock`. Keep changes focus
 
 ## Protocol Notes
 
-Use `src/version.js` for the default Bedrock protocol version and helpers. The default client/protocol version is `1.26.10`; shorthand `26.10` is normalized to `1.26.10`.
+Use `src/version.js` for the default Bedrock protocol version and helpers. The default client/protocol version is `1.26.51`; shorthand `26.51` is normalized to `1.26.51`.
 
 Use the installed `minecraft-data` Bedrock files under `node_modules/minecraft-data/minecraft-data/data/bedrock/<MC_VERSION>/` for exact packet shapes. When this repo is checked out through `prismarine-bedrock-workspace`, shared reference checkouts may also be available under the workspace root `ref/` directory:
 

@@ -34,8 +34,8 @@
   "dependencies": {
     "@nxg-org/mineflayer-physics-util": "^1.9.3",
     "@nxg-org/mineflayer-util-plugin": "^1.9.3",
-    "bedrock-protocol": "^3.59.0",
-    "minecraft-data": "^3.116.0",
+    "bedrock-protocol": "^3.60.1",
+    "minecraft-data": "^3.117.0",
     "mineflayer-crafting-util": "^0.5.0",
     "mineflayer-pathfinder": "^2.4.5",
     "prismarine-block": "^1.23.0",
