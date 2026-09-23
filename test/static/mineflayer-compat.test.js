@@ -7,7 +7,7 @@ const { pathfinder } = require('mineflayer-pathfinder')
 const mineflayerCompatPlugin = require('../../src/builtins/mineflayer-compat')
 
 function createCompatState () {
-  const registry = require('prismarine-registry')('bedrock_1.26.45')
+  const registry = require('prismarine-registry')('bedrock_1.26.51')
   const state = new EventEmitter()
   const blocks = new Map()
 
@@ -121,7 +121,7 @@ describe('mineflayer compatibility facade', function () {
     assert.deepStrictEqual(Object.values(bot.entities).map(entity => entity.name).sort(), ['cow', 'player'])
     assert.strictEqual(bot.inventory.items().length, 1)
     assert.strictEqual(bot.game.minY, -64)
-    assert.strictEqual(bot.version, 'bedrock_1.26.45')
+    assert.strictEqual(bot.version, 'bedrock_1.26.51')
     assert.strictEqual(bot.blockAt(new Vec3(1.8, 65.2, 1.1)).position.x, 1)
 
     state.setCompatBlock(new Vec3(2, 64, 0), 'dirt')

@@ -29,7 +29,7 @@ The practical comparison:
 
 | Area | This repo | Mineflayer |
 | --- | --- | --- |
-| Protocol | Uses `bedrock-protocol` directly. Targets Bedrock protocol shape, currently configured around `1.26.10` protocol data for BDS 1.26.12. | Uses `minecraft-protocol` for Java Edition. Supports many Java versions through version-aware protocol/data packages. |
+| Protocol | Uses `bedrock-protocol` directly. Targets Bedrock protocol shape, currently configured around `1.26.51` protocol data for BDS 1.26.51. | Uses `minecraft-protocol` for Java Edition. Supports many Java versions through version-aware protocol/data packages. |
 | Bot entrypoint | `createBot(options)` from the package root starts a bot; `BotState` in `src/state.js` remains available for manual construction. | `mineflayer.createBot(options)` creates a ready high-level bot with built-in plugins. |
 | Data model | Uses Prismarine packages with a Bedrock registry: `prismarine-registry`, `prismarine-block`, `prismarine-item`, `prismarine-entity`, `prismarine-world`, `prismarine-windows`, `prismarine-chat`. | Uses the same Prismarine ecosystem, but most packages are exercised against Java protocol semantics. |
 | Plugin model | Has `loadPlugin`, `loadPlugins`, `hasPlugin`, `injectPlugins`, and auto-loaded local builtins. | Mature plugin API with a broad third-party ecosystem and strong expectations around common bot APIs. |
